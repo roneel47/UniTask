@@ -164,17 +164,18 @@ export default function DashboardPage() {
          const semesterTarget = semester; // number | null
          const assignmentTarget = usnInput.trim(); // Use the correctly destructured variable
 
-         // Fetch users of the target semester if studentList is empty (fallback)
-         const currentStudentList = studentList.length > 0 ? studentList : await getAllUsers();
+         // --- FIX START: Fetch ALL users *within* the function ---
+         const allCurrentUsers = await getAllUsers();
          // Ensure USNs are uppercase and semester is handled
-         const uppercaseStudentList = currentStudentList.map(u => ({
+         const uppercaseUserList = allCurrentUsers.map(u => ({
              ...u,
              usn: u.usn.toUpperCase(),
              semester: u.semester, // Keep number or null
          }));
+         // --- FIX END ---
 
-          // Filter users matching the target semester (number or null)
-         const usersInSemester = uppercaseStudentList.filter(
+          // Filter users matching the target semester (number or null) using the freshly fetched list
+         const usersInSemester = uppercaseUserList.filter(
              (u) => (u.role === 'student' || u.role === 'admin') && u.semester === semesterTarget
          );
 
