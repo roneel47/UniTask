@@ -8,6 +8,9 @@ import { Task, TaskStatus } from '@/types/task'; // Import Task types
 // Define the master admin USN (must be uppercase) - NEW CREDENTIALS
 const MASTER_ADMIN_USN = 'MASTERADMIN1'; // New Master Admin USN
 
+// Simple password "hashing" simulation function
+const hashPassword = (pw: string | undefined): string | undefined => pw ? pw + '_sim_hash' : undefined;
+
 // Define the shape of the authentication context
 interface AuthContextType {
   user: User | null;
@@ -19,7 +22,6 @@ interface AuthContextType {
   register: (usn: string, semester: number, password?: string) => Promise<void>; // Added semester
   updateUserRole: (usn: string, role: 'student' | 'admin') => Promise<void>;
   getAllUsers: () => Promise<User[]>;
-  // promoteSemesters: () => Promise<{ promotedCount: number; maxSemesterCount: number }>; // Removed global promote
   promoteSpecificSemester: (semesterToPromote: number) => Promise<{ promotedCount: number; maxSemesterCount: number }>; // Added specific promote
   deleteUser: (usnToDelete: string) => Promise<void>; // Added delete user
   updateTask: (taskId: string, updates: Partial<Task>) => Promise<void>; // Function to update a task
@@ -36,14 +38,9 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-// Initial Mock Data (only used if localStorage is empty)
+// Initial Mock Data (only used if localStorage is empty) - Use HASHED passwords
 const initialMockUsers: User[] = [
-  // Ensure the master admin USN is uppercase here - NEW CREDENTIALS
-  { usn: MASTER_ADMIN_USN, role: 'admin', semester: 0, password: 'MasterPass!456' }, // New password
-  // Add other initial admins/students here if needed for testing
-  // { usn: 'TEACHER001', role: 'admin', semester: 0, password: 'adminpassword' },
-  // { usn: '1RG22CS001', role: 'admin', semester: 5, password: 'adminpassword' },
-  // { usn: '1RG22CS002', role: 'student', semester: 5, password: 'studentpassword' },
+  { usn: MASTER_ADMIN_USN, role: 'admin', semester: 0, password: hashPassword('MasterPass!456') }, // Use hashed password
 ];
 
 // Initial Mock Tasks (kept for demonstration, adjust as needed if no students exist initially)
@@ -53,7 +50,7 @@ const initialMockTasks: Task[] = [];
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true); // Auth loading
-  const [mockUsers, setMockUsers] = useState<User[]>([]); // Holds users WITH passwords in runtime state
+  const [mockUsers, setMockUsers] = useState<User[]>([]); // Holds users WITH HASHED passwords in runtime state
   const [tasks, setTasks] = useState<Task[]>([]); // Tasks state
   const [tasksLoading, setTasksLoading] = useState(true); // Tasks loading
 
@@ -91,24 +88,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
     };
 
-     const serializeUsers = (usersToSerialize: User[]): string => {
-        // Remove password before saving
-        // Ensure USN is uppercase before serializing
-        return JSON.stringify(usersToSerialize.map(({ password, ...user }) => ({
-            ...user,
-            usn: user.usn.toUpperCase(), // Ensure USN is uppercase
-        })));
-     };
-
       const deserializeUsers = (usersString: string | null): User[] => {
         if (!usersString) return [];
         try {
+            // Read the password (which should be the hashed version)
             return JSON.parse(usersString).map((user: any) => ({
                 ...user,
                 usn: user.usn.toUpperCase(), // Ensure USN is uppercase on deserialization too
-                // Ensure semester is number, default if missing/invalid
                 semester: typeof user.semester === 'number' ? user.semester : 0,
-                // Password is not stored/retrieved here for security simulation
+                password: user.password, // Read the stored (hashed) password
             }));
         } catch (error) {
             console.error("Failed to parse users from storage:", error);
@@ -124,56 +112,66 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setTasksLoading(true);
       let usersFromStorage: User[] = [];
       const storedMockUsers = localStorage.getItem('uniTaskMockUsers');
-      const masterAdminUserTemplate = initialMockUsers.find(u => u.usn === MASTER_ADMIN_USN)!; // Get the master admin template
+      // Ensure the template uses the *hashed* password
+      const masterAdminUserTemplate = {
+        ...initialMockUsers.find(u => u.usn === MASTER_ADMIN_USN)!,
+        password: hashPassword('MasterPass!456') // Ensure the template in memory uses the correct *current* hashed password
+      };
 
       try {
-        // 1. Load users from storage (these don't have passwords)
+        // 1. Load users from storage (these SHOULD have hashed passwords)
         usersFromStorage = deserializeUsers(storedMockUsers);
 
-        // 2. Create a map of initial users (with passwords) for easy lookup
+        // 2. Create a map of initial users (with hashed passwords) for easy lookup
         const initialUsersMap = new Map<string, User>(initialMockUsers.map(u => [u.usn, u]));
 
-        // 3. Combine storage users with initial users, prioritizing stored data but adding passwords from initial data
+        // 3. Combine storage users with initial users, prioritizing stored data including stored (hashed) passwords
         const combinedUsersMap = new Map<string, User>();
 
         // Add users from storage first
         usersFromStorage.forEach(storedUser => {
+             // Check if this user exists in initial data, mainly for the master admin
              const initialUserData = initialUsersMap.get(storedUser.usn);
-             // Add stored user, plus password if found in initial data
+             // Use the stored user data (including the hashed password from storage)
              combinedUsersMap.set(storedUser.usn, {
                  ...storedUser,
-                 password: initialUserData?.password,
+                 // If it's the master admin, overwrite with the template's correct hashed password
+                 password: storedUser.usn === MASTER_ADMIN_USN ? masterAdminUserTemplate.password : storedUser.password,
+                 // Ensure master admin role/semester are correct
+                 role: storedUser.usn === MASTER_ADMIN_USN ? 'admin' : storedUser.role,
+                 semester: storedUser.usn === MASTER_ADMIN_USN ? 0 : storedUser.semester,
              });
         });
 
          // Add any initial users that weren't in storage (like the master admin on first load)
          initialMockUsers.forEach(initialUser => {
              if (!combinedUsersMap.has(initialUser.usn)) {
-                 combinedUsersMap.set(initialUser.usn, initialUser); // Add with password
+                 // Ensure the correct hashed password is used if adding from initial template
+                 const initialPassword = initialUser.usn === MASTER_ADMIN_USN ? masterAdminUserTemplate.password : initialUser.password;
+                 combinedUsersMap.set(initialUser.usn, { ...initialUser, password: initialPassword }); // Add with hashed password
              }
          });
 
-         // Ensure the master admin always has the correct current password from the initial template
-         const masterAdminCurrentData = combinedUsersMap.get(MASTER_ADMIN_USN);
-         if (masterAdminCurrentData) {
-             combinedUsersMap.set(MASTER_ADMIN_USN, {
-                 ...masterAdminCurrentData,
-                 password: masterAdminUserTemplate.password, // Ensure correct password
-                 role: 'admin', // Ensure role is correct
-                 semester: 0, // Ensure semester is correct
-             });
-         } else {
-             // Master admin wasn't even in combined map, add fresh template
-             combinedUsersMap.set(MASTER_ADMIN_USN, masterAdminUserTemplate);
-         }
-
+        // Ensure the master admin is definitely in the map with the correct details from the template
+        if (!combinedUsersMap.has(MASTER_ADMIN_USN)) {
+            combinedUsersMap.set(MASTER_ADMIN_USN, masterAdminUserTemplate);
+        } else {
+            // Master admin was in the map, ensure its password/role/sem are correct from the template
+            const currentMasterAdminData = combinedUsersMap.get(MASTER_ADMIN_USN)!;
+            combinedUsersMap.set(MASTER_ADMIN_USN, {
+                ...currentMasterAdminData,
+                password: masterAdminUserTemplate.password,
+                role: 'admin',
+                semester: 0,
+            });
+        }
 
         const finalUsersWithPasswords = Array.from(combinedUsersMap.values());
 
-        // 4. Set runtime state with passwords
+        // 4. Set runtime state with hashed passwords
         setMockUsers(finalUsersWithPasswords);
-        // 5. Save to local storage *without* passwords
-        localStorage.setItem('uniTaskMockUsers', serializeUsers(finalUsersWithPasswords));
+        // 5. Save to local storage *WITH* hashed passwords (this is crucial for login persistence)
+        localStorage.setItem('uniTaskMockUsers', JSON.stringify(finalUsersWithPasswords));
 
 
         // Load tasks
@@ -193,6 +191,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (storedUser) {
           const parsedUser = JSON.parse(storedUser);
            // Ensure semester is correctly loaded and USN is uppercase for the session user
+           // Session user doesn't need password stored
           setUser({
               ...parsedUser,
               usn: parsedUser.usn.toUpperCase(),
@@ -205,9 +204,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
         localStorage.removeItem('uniTaskUser');
         localStorage.removeItem('uniTaskMockUsers');
         localStorage.removeItem('uniTaskTasks');
-        // Reset to include only the master admin with password
-        setMockUsers([masterAdminUserTemplate]); // Use template which includes password
-        localStorage.setItem('uniTaskMockUsers', serializeUsers([masterAdminUserTemplate])); // Save without password
+        // Reset to include only the master admin with hashed password
+        setMockUsers([masterAdminUserTemplate]); // Use template which includes hashed password
+        localStorage.setItem('uniTaskMockUsers', JSON.stringify([masterAdminUserTemplate])); // Save WITH hashed password
         setTasks(initialMockTasks); // Reset tasks
         localStorage.setItem('uniTaskTasks', serializeTasks(initialMockTasks));
       } finally {
@@ -220,12 +219,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
 
-  // Helper function to save mock users to localStorage (removes passwords)
+  // Helper function to save mock users to localStorage (now includes hashed passwords)
   const saveMockUsers = useCallback((updatedUsers: User[]) => {
     // Ensure USN is uppercase before saving state and local storage
     const uppercaseUsers = updatedUsers.map(u => ({...u, usn: u.usn.toUpperCase()}));
-    setMockUsers(uppercaseUsers); // Keep passwords in runtime state
-    localStorage.setItem('uniTaskMockUsers', serializeUsers(uppercaseUsers)); // Save without passwords
+    setMockUsers(uppercaseUsers); // Keep hashed passwords in runtime state
+    localStorage.setItem('uniTaskMockUsers', JSON.stringify(uppercaseUsers)); // Save WITH hashed passwords
   }, []);
 
     // Helper function to save tasks to localStorage
@@ -237,13 +236,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
 
-   const login = async (usnInput: string, password?: string): Promise<void> => {
+   const login = async (usnInput: string, passwordInput?: string): Promise<void> => {
     const usn = usnInput.toUpperCase(); // Ensure USN is uppercase
     setLoading(true);
     console.log(`Attempting login for USN: ${usn}`); // Debug log
     await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
 
-    // Use the runtime state `mockUsers` which should contain passwords
+    // Use the runtime state `mockUsers` which should contain HASHED passwords
     const foundUser = mockUsers.find(u => u.usn === usn); // Already uppercase in mockUsers
 
     console.log('Found user in runtime mock data:', foundUser); // Debug log
@@ -254,17 +253,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
         throw new Error("USN not found.");
     }
 
-    // Stricter password check: Provided password must exactly match the stored password.
-    // Allow login if stored password is undefined/empty AND provided password is also undefined/empty (legacy/initial state)
-    const passwordMatch = foundUser.password === password;
-    const noPasswordCaseMatch = (!foundUser.password && !password);
+    // Hash the provided password and compare with the stored hashed password
+    const hashedInputPassword = hashPassword(passwordInput);
+    const passwordMatch = foundUser.password === hashedInputPassword;
 
-    console.log(`Password check for ${usn}: Stored='${foundUser.password}', Provided='${password}', Match=${passwordMatch || noPasswordCaseMatch}`); // Debug log
+    console.log(`Password check for ${usn}: Stored Hash='${foundUser.password}', Input Hash='${hashedInputPassword}', Match=${passwordMatch}`); // Debug log
 
 
-    if (passwordMatch || noPasswordCaseMatch) {
+    if (passwordMatch) {
         console.log(`Login successful for ${usn}`); // Debug log
-        const { password: _, ...userToStore } = foundUser; // Destructure to remove password before storing in session/state
+        const { password: _, ...userToStore } = foundUser; // Destructure to remove hashed password before storing in session/state
         setUser(userToStore); // Update runtime user state (USN already uppercase)
         localStorage.setItem('uniTaskUser', JSON.stringify(userToStore)); // Save user session (without password)
         setLoading(false);
@@ -276,7 +274,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 };
 
 
-  const register = async (usnInput: string, semester: number, password?: string): Promise<void> => {
+  const register = async (usnInput: string, semester: number, passwordInput?: string): Promise<void> => {
     const usn = usnInput.toUpperCase(); // Ensure USN is uppercase
     setLoading(true);
     await new Promise(resolve => setTimeout(resolve, 500));
@@ -287,7 +285,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       throw new Error("USN already registered.");
     }
 
-    if (!password || password.length < 6) {
+    if (!passwordInput || passwordInput.length < 6) {
         setLoading(false);
         throw new Error("Password must be at least 6 characters long.");
     }
@@ -302,11 +300,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       usn: usn, // Already uppercase
       role: 'student',
       semester: semester, // Assign semester
-      password: password, // Store password in runtime state for login check
+      password: hashPassword(passwordInput), // Store HASHED password
     };
 
     const updatedUsers = [...mockUsers, newUser];
-    saveMockUsers(updatedUsers); // Saves to state (with pw) and localStorage (without pw), handles uppercase
+    saveMockUsers(updatedUsers); // Saves to state and localStorage (WITH hashed pw), handles uppercase
 
     setLoading(false);
   };
@@ -332,15 +330,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     const updatedUsers = [...mockUsers];
-    // Preserve password and semester when changing role
+    // Preserve hashed password and semester when changing role
     updatedUsers[userIndex] = { ...updatedUsers[userIndex], role: role };
 
-    saveMockUsers(updatedUsers); // Handles uppercase, preserves password in runtime state
-
-    // If the currently logged-in admin modifies *another* user who happens to be logged in elsewhere,
-    // their session data won't update automatically here. This implementation only updates the modifier's session
-    // if they were somehow changing their own role (which is prevented above).
-    // For a real app, you'd need a mechanism (like WebSockets or periodic checks) to update other active sessions.
+    saveMockUsers(updatedUsers); // Handles uppercase, preserves hashed password
 
     setLoading(false);
   };
@@ -388,7 +381,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (user && user.role === 'student' && user.semester === semesterToPromote) {
         const updatedLoggedInUser = updatedUsers.find(u => u.usn === user.usn); // Find using uppercase USN
         if (updatedLoggedInUser) {
-            const { password: _, ...userToStore } = updatedLoggedInUser;
+            const { password: _, ...userToStore } = updatedLoggedInUser; // Remove hashed password for session
             setUser(userToStore); // Update runtime user state (USN already uppercase)
             localStorage.setItem('uniTaskUser', JSON.stringify(userToStore)); // Update session storage
         }
@@ -420,7 +413,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
 
       const updatedUsers = mockUsers.filter(u => u.usn !== usnToDelete);
-      saveMockUsers(updatedUsers); // Saves runtime state (with passwords) and localStorage (without)
+      saveMockUsers(updatedUsers); // Saves runtime state and localStorage (with hashed passwords)
 
        // Also delete tasks associated with the user
        const updatedTasks = tasks.filter(task => task.usn !== usnToDelete);
@@ -584,7 +577,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     register,
     updateUserRole,
     getAllUsers,
-    // promoteSemesters, // Removed global promote
     promoteSpecificSemester, // Expose specific promote
     deleteUser, // Expose delete user
     updateTask,
@@ -596,3 +588,4 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
+
