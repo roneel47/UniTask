@@ -1,14 +1,18 @@
 "use client"
 
 import React, { useState, useEffect } from 'react';
-import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
+import { DragDropContext, DropResult } from '@hello-pangea/dnd'; // No need for Droppable, Draggable here
 import { KanbanColumn } from './kanban-column';
 import { Task, TaskStatus } from '@/types/task';
 import { groupTasksByStatus } from '@/lib/task-utils';
+import { useAuth } from '@/hooks/use-auth'; // Import useAuth
+import { useToast } from '@/hooks/use-toast'; // Import useToast
+
 
 interface KanbanBoardProps {
-  tasks: Task[];
-  onTaskMove: (taskId: string, newStatus: TaskStatus) => void;
+  tasks: Task[]; // Tasks are passed down, likely already filtered
+  // onTaskMove is now handled internally via context
+  // onTaskMove: (taskId: string, newStatus: TaskStatus) => void;
   isAdmin: boolean;
 }
 
@@ -20,61 +24,83 @@ const columnOrder: TaskStatus[] = [
   TaskStatus.Done,
 ];
 
-export function KanbanBoard({ tasks, onTaskMove, isAdmin }: KanbanBoardProps) {
+export function KanbanBoard({ tasks, isAdmin }: KanbanBoardProps) {
+  const { updateTask } = useAuth(); // Get updateTask from context
+  const { toast } = useToast(); // Get toast function
   const [groupedTasks, setGroupedTasks] = useState(groupTasksByStatus(tasks));
 
+
+  // Update grouped tasks whenever the tasks prop changes (from context update)
   useEffect(() => {
     setGroupedTasks(groupTasksByStatus(tasks));
   }, [tasks]);
 
-  const onDragEnd = (result: DropResult) => {
+  const onDragEnd = async (result: DropResult) => {
     const { destination, source, draggableId } = result;
 
-    // Dropped outside a droppable area
-    if (!destination) {
-      return;
-    }
+    if (!destination) return;
+    if (destination.droppableId === source.droppableId && destination.index === source.index) return;
 
-    // Dropped in the same place
-    if (
-      destination.droppableId === source.droppableId &&
-      destination.index === source.index
-    ) {
-      return;
-    }
-
-    const startColumnStatus = source.droppableId as TaskStatus;
-    const endColumnStatus = destination.droppableId as TaskStatus;
+    const startColumnStatus = source.droppableId as TaskStatus; // Status before drag
+    const endColumnStatus = destination.droppableId as TaskStatus; // Target status
     const taskId = draggableId;
 
-    // Student restriction: Cannot move *to* 'Done'
+    // Find the task being moved to check its current state if needed
+    // const movedTask = tasks.find(task => task.id === taskId);
+    // if (!movedTask) return; // Should not happen
+
+    // --- Role-Based Restrictions ---
+    // Student cannot move TO 'Done'
     if (!isAdmin && endColumnStatus === TaskStatus.Done) {
-      console.log("Student cannot move task to Done column.");
-      // Optionally show a toast message here
+       toast({
+            variant: "destructive",
+            title: "Action Denied",
+            description: "Only administrators can mark tasks as 'Done'.",
+       });
       return;
     }
 
-     // Student restriction: Cannot move *from* 'Done' (already handled by admin only move to Done)
-     // Admin can move freely
+     // Student cannot move FROM 'Done'
+    if (!isAdmin && startColumnStatus === TaskStatus.Done) {
+       toast({
+            variant: "destructive",
+            title: "Action Denied",
+            description: "Tasks marked as 'Done' cannot be moved back.",
+       });
+       return;
+    }
 
+     // Student cannot move FROM 'Submitted' (unless admin allows edits maybe?)
+     // Let's enforce this for now. Admin can move from Submitted.
+     if (!isAdmin && startColumnStatus === TaskStatus.Submitted && endColumnStatus !== TaskStatus.Submitted) {
+        toast({
+            variant: "destructive",
+            title: "Action Denied",
+            description: "Submitted tasks cannot be moved back without admin review.",
+        });
+        return;
+     }
 
-    // Call the handler passed from the parent (DashboardPage)
-    onTaskMove(taskId, endColumnStatus);
+     // --- Call Context Update ---
+     // No optimistic update needed here, useEffect will refresh columns when context state changes
+    console.log(`Attempting move: Task ${taskId} from ${startColumnStatus} to ${endColumnStatus}`);
+    try {
+      await updateTask(taskId, { status: endColumnStatus });
+       toast({
+        title: "Task Moved",
+        description: `Task successfully moved to ${endColumnStatus}.`,
+      });
+    } catch (error: any) {
+      console.error("Failed to update task status via context:", error);
+      toast({
+        variant: "destructive",
+        title: "Move Failed",
+        description: error.message || `Could not move the task to ${endColumnStatus}.`,
+      });
+      // State reverts automatically because context wasn't updated successfully
+    }
 
-     // Optimistic update (commented out - handled by parent state update via useEffect)
-    /*
-    const startColumnTasks = Array.from(groupedTasks[startColumnStatus] || []);
-    const [movedTask] = startColumnTasks.splice(source.index, 1);
-
-    const endColumnTasks = Array.from(groupedTasks[endColumnStatus] || []);
-    endColumnTasks.splice(destination.index, 0, { ...movedTask, status: endColumnStatus });
-
-    setGroupedTasks(prev => ({
-      ...prev,
-      [startColumnStatus]: startColumnTasks,
-      [endColumnStatus]: endColumnTasks,
-    }));
-    */
+    // Optimistic update logic removed - useEffect handles updates based on context changes.
   };
 
   return (
@@ -82,8 +108,13 @@ export function KanbanBoard({ tasks, onTaskMove, isAdmin }: KanbanBoardProps) {
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         {columnOrder.map((status) => {
           const columnTasks = groupedTasks[status] || [];
-          // Determine if the column is droppable based on role
+          // Determine if the column is droppable based on role and target status
+          // Students cannot drop INTO 'Done'
           const isDroppable = isAdmin || (status !== TaskStatus.Done);
+           // Determine if tasks IN this column are draggable based on role and current status
+           // Students cannot drag FROM 'Done' or 'Submitted'
+           const isDraggableFrom = isAdmin || (status !== TaskStatus.Done && status !== TaskStatus.Submitted);
+
 
           return (
             <KanbanColumn
@@ -92,6 +123,7 @@ export function KanbanBoard({ tasks, onTaskMove, isAdmin }: KanbanBoardProps) {
               tasks={columnTasks}
               isAdmin={isAdmin}
               isDroppable={isDroppable}
+              isDraggableFrom={isDraggableFrom} // Pass down if tasks in this column can be dragged
             />
           );
         })}

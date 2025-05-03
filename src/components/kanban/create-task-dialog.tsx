@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React from 'react'; // Removed useState as isLoading comes from props
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
@@ -34,19 +34,19 @@ interface CreateTaskDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onCreate: (taskData: Omit<Task, 'id' | 'status' | 'assignedBy'>) => void;
+  isLoading: boolean; // Add isLoading prop
 }
 
 const formSchema = z.object({
   title: z.string().min(1, { message: 'Title is required.' }),
   description: z.string().min(1, { message: 'Description is required.' }),
   dueDate: z.date({ required_error: 'Due date is required.' }),
-   // Add field for assigning to specific USN or group (e.g., 'all', '1rg22cs005')
   assignTo: z.string().min(1, {message: "Specify who to assign to ('all' or USN)."} ),
-  // attachmentUrl: z.string().url().optional(), // Optional: For attaching files during creation
+  // attachmentUrl: z.string().url().optional(), // Optional
 });
 
-export function CreateTaskDialog({ isOpen, onClose, onCreate }: CreateTaskDialogProps) {
-  const [isLoading, setIsLoading] = useState(false);
+export function CreateTaskDialog({ isOpen, onClose, onCreate, isLoading }: CreateTaskDialogProps) {
+  // isLoading state removed, now passed as prop
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -54,50 +54,47 @@ export function CreateTaskDialog({ isOpen, onClose, onCreate }: CreateTaskDialog
       title: '',
       description: '',
       dueDate: undefined,
-      assignTo: 'all', // Default to assigning all students in the focus group
+      assignTo: 'all',
     },
   });
 
    const handleDialogClose = (open: boolean) => {
-    if (!open) {
-      form.reset(); // Reset form when dialog closes
+    if (!open && !isLoading) { // Prevent closing while loading
+      form.reset();
       onClose();
     }
-  };
+   };
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
-    setIsLoading(true);
-    console.log("Creating task with values:", values);
-    // In a real app, you'd handle file uploads if needed before calling onCreate
+    // isLoading state management moved to parent (DashboardPage)
+    console.log("Submitting task creation with values:", values);
     try {
-        // Construct the task data, mapping assignTo to the USN field logic
-        // This is simplified; backend would handle 'all' expansion
         const taskData = {
             title: values.title,
             description: values.description,
             dueDate: values.dueDate,
-            usn: values.assignTo, // Pass 'all' or specific USN
+            usn: values.assignTo,
             // attachmentUrl: values.attachmentUrl,
         };
-        onCreate(taskData);
-        form.reset();
-        onClose(); // Close dialog on success
+        await onCreate(taskData); // Make onCreate potentially async if needed in parent
+        // Success handling (closing dialog, resetting form) is now managed in the parent's handleCreateTask
+         form.reset(); // Reset form on successful submission *after* parent handles it
+         // onClose(); // Let parent decide when to close
     } catch (error) {
-        console.error("Failed to create task:", error);
-        // Show error toast if needed
-    } finally {
-        setIsLoading(false);
+        console.error("Error during task submission in dialog:", error);
+        // Error display is handled in the parent component (DashboardPage) via toast/alert
     }
-
+    // finally { setIsLoading(false); } // Removed, parent manages loading
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleDialogClose}>
+    // Prevent closing via overlay click or escape key when loading
+    <Dialog open={isOpen} onOpenChange={handleDialogClose} modal={!isLoading}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Create New Task/Assignment</DialogTitle>
           <DialogDescription>
-            Fill in the details for the new task. It will be added to the 'To Be Started' column.
+            Fill in the details for the new task. Assigned tasks appear in the respective student's 'To Be Started' column.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -109,7 +106,7 @@ export function CreateTaskDialog({ isOpen, onClose, onCreate }: CreateTaskDialog
                 <FormItem>
                   <FormLabel>Title</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., Lab Assignment 4" {...field} />
+                    <Input placeholder="e.g., Lab Assignment 4" {...field} disabled={isLoading} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -122,7 +119,7 @@ export function CreateTaskDialog({ isOpen, onClose, onCreate }: CreateTaskDialog
                 <FormItem>
                   <FormLabel>Description</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Describe the task requirements..." {...field} />
+                    <Textarea placeholder="Describe the task requirements..." {...field} disabled={isLoading} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -135,10 +132,10 @@ export function CreateTaskDialog({ isOpen, onClose, onCreate }: CreateTaskDialog
                 <FormItem>
                   <FormLabel>Assign To</FormLabel>
                   <FormControl>
-                     <Input placeholder="Enter 'all' or specific USN (e.g., 1RG22CS005)" {...field} />
+                     <Input placeholder="Enter 'all' or specific USN (e.g., 1RG22CS005)" {...field} disabled={isLoading} />
                   </FormControl>
                    <FormMessage />
-                   <p className="text-xs text-muted-foreground">Use 'all' for 1RG22CS001-098 focus group.</p>
+                   <p className="text-xs text-muted-foreground">Use 'all' to assign to all current student users.</p>
                 </FormItem>
               )}
             />
@@ -157,9 +154,10 @@ export function CreateTaskDialog({ isOpen, onClose, onCreate }: CreateTaskDialog
                             "w-full pl-3 text-left font-normal",
                             !field.value && "text-muted-foreground"
                           )}
+                          disabled={isLoading} // Disable popover trigger when loading
                         >
                           {field.value ? (
-                            format(field.value, "PPP") // e.g., Oct 25, 2024
+                            format(field.value, "PPP")
                           ) : (
                             <span>Pick a date</span>
                           )}
@@ -172,7 +170,7 @@ export function CreateTaskDialog({ isOpen, onClose, onCreate }: CreateTaskDialog
                         mode="single"
                         selected={field.value}
                         onSelect={field.onChange}
-                        disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))} // Disable past dates
+                        disabled={(date) => date < new Date(new Date().setHours(0,0,0,0)) || isLoading} // Disable past dates and calendar when loading
                         initialFocus
                       />
                     </PopoverContent>

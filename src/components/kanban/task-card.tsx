@@ -1,17 +1,31 @@
 import React, { useState } from 'react';
 import { Draggable } from '@hello-pangea/dnd';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Task } from '@/types/task';
+import { Task, TaskStatus } from '@/types/task';
 import { Badge } from '@/components/ui/badge';
 import { getDueDateColor, formatDueDate } from '@/lib/date-utils';
 import { Button } from '@/components/ui/button';
-import { Upload, Download, Edit, Trash2, Paperclip, CheckCircle, Clock } from 'lucide-react';
+import { Upload, Download, Edit, Trash2, Paperclip, CheckCircle, Clock, Loader2 } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { useAuth } from '@/hooks/use-auth'; // Import useAuth
+import { useToast } from '@/hooks/use-toast'; // Import useToast
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"; // Import AlertDialog components
+
 
 interface TaskCardProps {
   task: Task;
@@ -22,43 +36,116 @@ interface TaskCardProps {
 
 export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
     const [isExpanded, setIsExpanded] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false); // State for delete loading
+    const [isUploading, setIsUploading] = useState(false); // State for upload loading
     const dueDateColor = getDueDateColor(task.dueDate);
+    const { updateTask, deleteTask } = useAuth(); // Get context functions
+    const { toast } = useToast(); // Get toast function
+
+    // --- Handlers using Context Functions ---
 
     const handleUploadClick = () => {
-        // Trigger file input or open upload modal
-        console.log(`Upload requested for task ${task.id}`);
-         // In real app, trigger input file click: document.getElementById(`file-input-${task.id}`).click();
+        // Trigger file input
+        const fileInput = document.getElementById(`file-input-${task.id}`) as HTMLInputElement;
+         if (fileInput) {
+           fileInput.click();
+         }
     };
+
+    const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+         const file = event.target.files?.[0];
+         if (!file) return;
+
+         setIsUploading(true);
+         console.log(`Uploading file for task ${task.id}:`, file.name);
+         // Simulate upload process (replace with actual API call)
+         await new Promise(resolve => setTimeout(resolve, 1500));
+
+         // Simulate getting a submission URL
+         const mockSubmissionUrl = `https://example.com/submissions/${task.id}/${file.name}`; // Replace with actual URL
+
+         try {
+            // Update task status to Submitted and add submissionUrl
+            await updateTask(task.id, {
+               status: TaskStatus.Submitted,
+               submissionUrl: mockSubmissionUrl,
+               // submittedAt will be set automatically by updateTask in context
+            });
+            toast({
+                title: "Submission Uploaded",
+                description: `File ${file.name} submitted successfully.`,
+            });
+         } catch (error: any) {
+            console.error("Failed to update task after upload:", error);
+            toast({
+                variant: "destructive",
+                title: "Upload Failed",
+                description: error.message || "Could not update task after file upload.",
+            });
+         } finally {
+            setIsUploading(false);
+             // Reset file input value to allow re-uploading the same file if needed
+            event.target.value = '';
+         }
+    };
+
 
     const handleDownloadClick = (url: string | undefined) => {
         if (!url) return;
         console.log(`Download requested for ${url}`);
-        window.open(url, '_blank'); // Open attachment/submission in new tab
+        window.open(url, '_blank');
     };
 
     const handleEditClick = () => {
-      // Open edit modal/dialog - only for admins
+      // TODO: Implement Edit Task Dialog/Modal
+      // This would typically involve:
+      // 1. Opening a Dialog (similar to CreateTaskDialog but pre-filled).
+      // 2. Calling `updateTask` from useAuth on successful save.
       if (!isAdmin) return;
       console.log(`Edit requested for task ${task.id}`);
+      toast({
+          title: "Edit Not Implemented",
+          description: "Editing task details is not yet available.",
+      });
     };
 
-     const handleDeleteClick = () => {
-      // Show confirmation and delete task - only for admins
-      if (!isAdmin) return;
-       console.log(`Delete requested for task ${task.id}`);
-        // Add confirmation dialog here
+     const handleDeleteConfirm = async () => {
+        if (!isAdmin) return;
+        setIsDeleting(true);
+        console.log(`Deleting task ${task.id}`);
+        try {
+            await deleteTask(task.id); // Call deleteTask from context
+            toast({
+                title: "Task Deleted",
+                description: `Task "${task.title}" has been removed.`,
+            });
+            // No need to update local state, context provider handles it
+        } catch (error: any) {
+            console.error("Failed to delete task:", error);
+            toast({
+                variant: "destructive",
+                title: "Deletion Failed",
+                description: error.message || "Could not delete the task.",
+            });
+        } finally {
+            setIsDeleting(false);
+        }
     };
 
   return (
-    <Draggable draggableId={task.id} index={index} isDragDisabled={!isDraggable}>
+    <Draggable draggableId={task.id} index={index} isDragDisabled={!isDraggable || isDeleting || isUploading}>
       {(provided, snapshot) => (
         <Card
           ref={provided.innerRef}
           {...provided.draggableProps}
           {...provided.dragHandleProps}
-          className={`bg-card shadow-md hover:shadow-lg transition-shadow ${
-            snapshot.isDragging ? 'ring-2 ring-primary' : ''
-          } ${!isDraggable ? 'opacity-80 cursor-not-allowed' : ''}`}
+          className={cn(
+            "bg-card shadow-md hover:shadow-lg transition-shadow",
+             snapshot.isDragging ? 'ring-2 ring-primary' : '',
+             !isDraggable ? 'opacity-80 cursor-not-allowed' : '',
+             isDeleting ? 'opacity-50 animate-pulse' : '' // Visual feedback for deleting
+          )}
+          aria-busy={isDeleting || isUploading}
         >
           <CardHeader className="p-3 pb-2">
             <CardTitle
@@ -68,21 +155,29 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
                 {task.title}
             </CardTitle>
             <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
-              <span>Due: {formatDueDate(task.dueDate)}</span>
+               <TooltipProvider>
+                 <Tooltip>
+                   <TooltipTrigger asChild>
+                      <span>Due: {formatDueDate(task.dueDate)}</span>
+                   </TooltipTrigger>
+                   <TooltipContent>
+                      <p>{task.dueDate.toLocaleString()}</p>
+                   </TooltipContent>
+                 </Tooltip>
+               </TooltipProvider>
               <Badge
                 variant="outline"
                 className={`px-2 py-0.5 text-xs ${
-                  dueDateColor === 'red' ? 'bg-red-100 text-red-800 border-red-300 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700' :
-                  dueDateColor === 'yellow' ? 'bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-700' :
-                  'bg-white text-gray-800 border-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-500'
+                  dueDateColor === 'red' ? 'border-red-300 bg-red-100 text-red-800 dark:border-red-700 dark:bg-red-900/30 dark:text-red-300' :
+                  dueDateColor === 'yellow' ? 'border-yellow-300 bg-yellow-100 text-yellow-800 dark:border-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' :
+                  'border-gray-300 bg-card text-foreground dark:border-gray-600' // Use card background for 'white'
                 }`}
               >
                 {
                  dueDateColor === 'red' ? <Clock className="inline-block h-3 w-3 mr-1" /> :
                  dueDateColor === 'yellow' ? <Clock className="inline-block h-3 w-3 mr-1" /> :
-                 <CheckCircle className="inline-block h-3 w-3 mr-1 text-green-600 dark:text-green-400" /> // Using CheckCircle for 'white' for variety
+                 <CheckCircle className="inline-block h-3 w-3 mr-1 text-green-600 dark:text-green-400" />
                 }
-
                 {
                   dueDateColor === 'red' ? 'Urgent' :
                   dueDateColor === 'yellow' ? 'Soon' :
@@ -93,23 +188,52 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
           </CardHeader>
           {isExpanded && (
              <CardContent className="p-3 pt-0 text-sm text-muted-foreground">
-                <p>{task.description}</p>
+                <p className="whitespace-pre-wrap">{task.description}</p> {/* Preserve whitespace */}
                 <p className="text-xs mt-2">Assigned by: {task.assignedBy}</p>
-                 {task.submittedAt && <p className="text-xs mt-1">Submitted: {formatDueDate(task.submittedAt, true)}</p>}
-                  {task.completedAt && <p className="text-xs mt-1">Marked Done: {formatDueDate(task.completedAt, true)}</p>}
+                 {task.submittedAt && (
+                    <TooltipProvider>
+                        <Tooltip>
+                        <TooltipTrigger asChild>
+                            <p className="text-xs mt-1">Submitted: {formatDueDate(task.submittedAt, true)}</p>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>{task.submittedAt.toLocaleString()}</p>
+                        </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                 )}
+                  {task.completedAt && (
+                    <TooltipProvider>
+                         <Tooltip>
+                         <TooltipTrigger asChild>
+                             <p className="text-xs mt-1">Marked Done: {formatDueDate(task.completedAt, true)}</p>
+                         </TooltipTrigger>
+                         <TooltipContent>
+                             <p>{task.completedAt.toLocaleString()}</p>
+                         </TooltipContent>
+                         </Tooltip>
+                     </TooltipProvider>
+                  )}
              </CardContent>
           )}
           <CardFooter className="p-3 pt-1 flex justify-between items-center">
-              {/* Hidden file input for student uploads */}
-            <input type="file" id={`file-input-${task.id}`} className="hidden" accept=".pdf, image/*" />
+            {/* Hidden file input for student uploads */}
+            <input
+                type="file"
+                id={`file-input-${task.id}`}
+                className="hidden"
+                accept=".pdf,.doc,.docx,.txt,image/*" // Specify acceptable file types
+                onChange={handleFileChange}
+                disabled={isUploading}
+            />
              <div className="flex space-x-1">
-                 {/* Student Actions */}
-                {!isAdmin && task.status !== 'Done' && task.status !== 'Submitted' && (
+                 {/* Student Actions: Upload only if not Submitted or Done */}
+                {!isAdmin && ![TaskStatus.Submitted, TaskStatus.Done].includes(task.status) && (
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={handleUploadClick}>
-                                    <Upload className="h-4 w-4" />
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={handleUploadClick} disabled={isUploading}>
+                                    {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                                 </Button>
                             </TooltipTrigger>
                              <TooltipContent>
@@ -118,12 +242,12 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
                         </Tooltip>
                     </TooltipProvider>
                 )}
-                 {/* View Attachments/Submissions */}
+                 {/* View Attachments (Admin provided) */}
                  {task.attachmentUrl && (
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger asChild>
-                               <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={() => handleDownloadClick(task.attachmentUrl)}>
+                               <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={() => handleDownloadClick(task.attachmentUrl)} disabled={isDeleting || isUploading}>
                                     <Paperclip className="h-4 w-4" />
                                 </Button>
                             </TooltipTrigger>
@@ -133,11 +257,12 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
                         </Tooltip>
                     </TooltipProvider>
                  )}
+                 {/* View Submission (Student uploaded) */}
                  {task.submissionUrl && (
                      <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:text-green-700" onClick={() => handleDownloadClick(task.submissionUrl)}>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:text-green-700" onClick={() => handleDownloadClick(task.submissionUrl)} disabled={isDeleting || isUploading}>
                                     <Download className="h-4 w-4" />
                                 </Button>
                              </TooltipTrigger>
@@ -155,27 +280,53 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
                      <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={handleEditClick}>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={handleEditClick} disabled={isDeleting || isUploading}>
                                     <Edit className="h-4 w-4" />
                                 </Button>
                              </TooltipTrigger>
                               <TooltipContent>
-                                <p>Edit Task</p>
-                            </TooltipContent>
+                                <p>Edit Task (Not Implemented)</p>
+                              </TooltipContent>
                         </Tooltip>
                     </TooltipProvider>
-                     <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive/80 hover:text-destructive" onClick={handleDeleteClick}>
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>Delete Task</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
+
+                    {/* Delete Button with Confirmation */}
+                     <AlertDialog>
+                         <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                     <AlertDialogTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive/80 hover:text-destructive" disabled={isDeleting || isUploading}>
+                                            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin"/> : <Trash2 className="h-4 w-4" />}
+                                        </Button>
+                                     </AlertDialogTrigger>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p>Delete Task</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                This action cannot be undone. This will permanently delete the task
+                                "{task.title}" for student {task.usn}.
+                            </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={handleDeleteConfirm}
+                                disabled={isDeleting}
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                                {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                Delete
+                            </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
                 </div>
             )}
           </CardFooter>

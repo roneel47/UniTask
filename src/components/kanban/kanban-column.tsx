@@ -1,5 +1,5 @@
 import React from 'react';
-import { Droppable, Draggable } from '@hello-pangea/dnd';
+import { Droppable } from '@hello-pangea/dnd'; // Only Droppable needed here
 import { TaskCard } from './task-card';
 import { Task, TaskStatus } from '@/types/task';
 import { cn } from '@/lib/utils';
@@ -8,10 +8,11 @@ interface KanbanColumnProps {
   status: TaskStatus;
   tasks: Task[];
   isAdmin: boolean;
-   isDroppable: boolean; // New prop to control if dropping is allowed
+  isDroppable: boolean; // Can items be dropped INTO this column?
+  isDraggableFrom: boolean; // Can items be dragged FROM this column?
 }
 
-export function KanbanColumn({ status, tasks, isAdmin, isDroppable }: KanbanColumnProps) {
+export function KanbanColumn({ status, tasks, isAdmin, isDroppable, isDraggableFrom }: KanbanColumnProps) {
   return (
     <div className="flex flex-col bg-secondary rounded-lg shadow-sm h-full min-h-[200px]">
       <h2 className="text-lg font-semibold p-4 border-b text-foreground sticky top-0 bg-secondary rounded-t-lg z-10">
@@ -25,7 +26,7 @@ export function KanbanColumn({ status, tasks, isAdmin, isDroppable }: KanbanColu
             className={cn(
               "p-4 space-y-4 overflow-y-auto flex-grow min-h-[150px]",
               snapshot.isDraggingOver ? 'bg-accent/20' : 'bg-secondary',
-               !isDroppable && !isAdmin ? 'opacity-70 cursor-not-allowed' : '' // Visual cue for non-droppable for students
+              !isDroppable ? 'opacity-70' : '' // Visual cue if column is not droppable (e.g., 'Done' for students)
             )}
             style={{ minHeight: 'calc(100vh - 250px)' }} // Adjust height as needed
           >
@@ -35,8 +36,9 @@ export function KanbanColumn({ status, tasks, isAdmin, isDroppable }: KanbanColu
                 task={task}
                 index={index}
                 isAdmin={isAdmin}
-                 // Prevent dragging from 'Done' unless admin
-                isDraggable={isAdmin || task.status !== TaskStatus.Done}
+                // Pass the isDraggableFrom flag down to the card
+                // The card itself might have further logic, but this controls if it's draggable *at all* from this column
+                isDraggable={isDraggableFrom}
               />
             ))}
             {provided.placeholder}
