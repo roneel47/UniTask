@@ -70,7 +70,7 @@ export default function ManageUsersPage() {
       const semesterNumber = parseInt(selectedSemesterFilter, 10);
       setFilteredUsers(allUsers.filter(u => u.semester === semesterNumber));
     }
-  }, [allUsers, selectedSemesterFilter]);
+   }, [allUsers, selectedSemesterFilter]);
 
 
   const fetchUsers = async () => {
@@ -79,8 +79,9 @@ export default function ManageUsersPage() {
       try {
         const userList = await getAllUsers();
         // Ensure users are sorted (e.g., by semester then USN) for consistent display
+        // USNs are already uppercase from context
         userList.sort((a, b) => (a.semester - b.semester) || a.usn.localeCompare(b.usn));
-        setAllUsers(userList); // Store all users
+        setAllUsers(userList); // Store all users (USNs are uppercase)
         // setFilteredUsers(userList); // Initial display (will be updated by useEffect)
       } catch (err: any) {
          console.error("Failed to fetch users:", err);
@@ -96,6 +97,7 @@ export default function ManageUsersPage() {
   }
 
   const handleRoleChange = async (targetUser: User, newRole: 'student' | 'admin') => {
+     // Compare uppercase USNs
      if (user?.usn === targetUser.usn) {
          toast({
              variant: "destructive",
@@ -107,13 +109,14 @@ export default function ManageUsersPage() {
 
     setUpdatingUsers(prev => ({ ...prev, [targetUser.usn]: true }));
     try {
+      // Pass uppercase USN to context function
       await updateUserRole(targetUser.usn, newRole);
       // Update local state immediately for responsiveness (both allUsers and filteredUsers)
        const updateList = (list: User[]) => list.map(u =>
             u.usn === targetUser.usn ? { ...u, role: newRole } : u
        );
       setAllUsers(prev => updateList(prev)); // Update allUsers triggers useEffect for filteredUsers
-      // Re-sort after update
+      // Re-sort after update (USNs already uppercase)
       setAllUsers(prev => [...prev].sort((a, b) => (a.semester - b.semester) || a.usn.localeCompare(b.usn)));
 
       toast({
@@ -132,7 +135,7 @@ export default function ManageUsersPage() {
           u.usn === targetUser.usn ? { ...u, role: targetUser.role } : u // Revert to original role
        );
        setAllUsers(prev => revertList(prev));
-        // Re-sort after revert
+        // Re-sort after revert (USNs already uppercase)
        setAllUsers(prev => [...prev].sort((a, b) => (a.semester - b.semester) || a.usn.localeCompare(b.usn)));
 
     } finally {
@@ -317,6 +320,7 @@ export default function ManageUsersPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
+              {/* Filtered users already have uppercase USNs */}
               {filteredUsers.map((targetUser) => (
                 <TableRow key={targetUser.usn}>
                   <TableCell className="font-medium">{targetUser.usn}</TableCell>
@@ -331,7 +335,7 @@ export default function ManageUsersPage() {
                             onCheckedChange={(checked) =>
                               handleRoleChange(targetUser, checked ? 'admin' : 'student')
                             }
-                            // Admin cannot change own role. Also disable if data is loading or this user is being updated.
+                            // Admin cannot change own role (compare uppercase USNs). Also disable if data is loading or this user is being updated.
                             disabled={loading || updatingUsers[targetUser.usn] || isPromoting || user.usn === targetUser.usn}
                             aria-label={`Set ${targetUser.usn} as admin`}
                          />

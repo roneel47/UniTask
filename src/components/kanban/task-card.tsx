@@ -27,6 +27,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"; // Import AlertDialog components
 import { cn } from '@/lib/utils'; // Import the cn utility function
+import { format } from 'date-fns'; // Import format for submittedAt date
 
 
 interface TaskCardProps {
@@ -64,7 +65,8 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
          await new Promise(resolve => setTimeout(resolve, 1500));
 
          // Simulate getting a submission URL
-         const mockSubmissionUrl = `https://example.com/submissions/${task.id}/${file.name}`; // Replace with actual URL
+         // Ensure USN in URL is uppercase
+         const mockSubmissionUrl = `https://example.com/submissions/${task.usn.toUpperCase()}/${task.id}/${file.name}`; // Replace with actual URL
 
          try {
             // Update task status to Submitted and add submissionUrl
@@ -156,12 +158,13 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
             >
                 {task.title}
             </CardTitle>
-            {/* Display Assigned USN and Semester for Admin */}
+            {/* Display Assigned USN (uppercase) and Semester for Admin */}
             {isAdmin && (
                 <div className="flex items-center space-x-3 text-xs text-muted-foreground pt-1">
                     <span className="flex items-center">
                         <User className="h-3 w-3 mr-1" />
-                        {task.usn}
+                         {/* Ensure USN is displayed in uppercase */}
+                        {task.usn.toUpperCase()}
                     </span>
                      <span className="flex items-center">
                         <BookCopy className="h-3 w-3 mr-1" />
@@ -204,12 +207,14 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
           {isExpanded && (
              <CardContent className="p-3 pt-0 text-sm text-muted-foreground">
                 <p className="whitespace-pre-wrap">{task.description}</p> {/* Preserve whitespace */}
-                <p className="text-xs mt-2">Assigned by: {task.assignedBy}</p>
+                 {/* Ensure assignedBy USN is uppercase */}
+                <p className="text-xs mt-2">Assigned by: {task.assignedBy.toUpperCase()}</p>
                  {task.submittedAt && (
                     <TooltipProvider>
                         <Tooltip>
                         <TooltipTrigger asChild>
-                            <p className="text-xs mt-1">Submitted: {formatDueDate(task.submittedAt, true)}</p>
+                             {/* Use formatDueDate or basic format */}
+                            <p className="text-xs mt-1">Submitted: {format(task.submittedAt, 'MMM d, yyyy HH:mm')}</p>
                         </TooltipTrigger>
                         <TooltipContent>
                             <p>{task.submittedAt.toLocaleString()}</p>
@@ -221,7 +226,8 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
                     <TooltipProvider>
                          <Tooltip>
                          <TooltipTrigger asChild>
-                             <p className="text-xs mt-1">Marked Done: {formatDueDate(task.completedAt, true)}</p>
+                              {/* Use formatDueDate or basic format */}
+                             <p className="text-xs mt-1">Marked Done: {format(task.completedAt, 'MMM d, yyyy HH:mm')}</p>
                          </TooltipTrigger>
                          <TooltipContent>
                              <p>{task.completedAt.toLocaleString()}</p>
@@ -237,7 +243,7 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
                 type="file"
                 id={`file-input-${task.id}`}
                 className="hidden"
-                accept=".pdf,.doc,.docx,.txt,image/*" // Specify acceptable file types
+                accept=".pdf,.doc,.docx,.txt,image/*,.zip,.rar" // Specify acceptable file types
                 onChange={handleFileChange}
                 disabled={isUploading}
             />
@@ -325,8 +331,9 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
                             <AlertDialogHeader>
                             <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                             <AlertDialogDescription>
+                                 {/* Ensure USN is uppercase */}
                                 This action cannot be undone. This will permanently delete the task
-                                "{task.title}" for student {task.usn}.
+                                "{task.title}" for student {task.usn.toUpperCase()}.
                             </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>

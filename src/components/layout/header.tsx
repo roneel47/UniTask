@@ -28,8 +28,10 @@ export function Header() {
 
   const getInitials = (usn: string) => {
     if (!usn) return 'U';
+    // Ensure USN is uppercase before getting initials
+    const upperUsn = usn.toUpperCase();
     // Attempt to get initials from potential name or default to USN chars
-    return usn.substring(0, 2).toUpperCase();
+    return upperUsn.substring(0, 2).toUpperCase();
   }
 
   return (
@@ -63,20 +65,23 @@ export function Header() {
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="relative h-8 flex items-center justify-between space-x-2 px-2">
                     <Avatar className="h-7 w-7">
-                      {/* Placeholder image */}
-                      <AvatarImage src={`https://avatar.vercel.sh/${user.usn}.png`} alt={user.usn} />
+                       {/* Ensure USN used for avatar URL and alt is uppercase */}
+                      <AvatarImage src={`https://avatar.vercel.sh/${user.usn.toUpperCase()}.png`} alt={user.usn.toUpperCase()} />
+                       {/* Initials are already handled in getInitials */}
                       <AvatarFallback>{getInitials(user.usn)}</AvatarFallback>
                     </Avatar>
-                    <span className="hidden sm:inline-block text-sm font-medium">{user.usn}</span>
+                    {/* Display USN in uppercase */}
+                    <span className="hidden sm:inline-block text-sm font-medium">{user.usn.toUpperCase()}</span>
                     <ChevronsUpDown className="ml-1 h-4 w-4 opacity-50" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="w-56" align="end" forceMount>
                   <DropdownMenuLabel className="font-normal">
                     <div className="flex flex-col space-y-1">
-                      <p className="text-sm font-medium leading-none">{user.usn}</p>
+                       {/* Display USN in uppercase */}
+                      <p className="text-sm font-medium leading-none">{user.usn.toUpperCase()}</p>
                       <p className="text-xs leading-none text-muted-foreground">
-                        {user.role === 'admin' ? 'Administrator' : 'Student'}
+                        {user.role === 'admin' ? 'Administrator' : `Student - Sem ${user.semester ?? 'N/A'}`}
                       </p>
                     </div>
                   </DropdownMenuLabel>

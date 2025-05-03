@@ -31,28 +31,15 @@ interface AuthProviderProps {
 }
 
 // Initial Mock Data (only used if localStorage is empty)
+// Only one admin initially
 const initialMockUsers: User[] = [
-  { usn: '1RG22CS001', role: 'admin', semester: 6, password: 'adminpassword' }, // Admin associated with a default semester
-  { usn: 'TEACHER001', role: 'admin', semester: 0, password: 'adminpassword' }, // Another admin (can handle multiple sems)
-  // Students in different semesters
-  { usn: '1RG22CS002', role: 'student', semester: 6, password: 'studentpassword' },
-  { usn: '1RG22CS003', role: 'student', semester: 6, password: 'studentpassword' },
-  { usn: '1RG23CS050', role: 'student', semester: 4, password: 'studentpassword' },
-  { usn: '1RG23CS051', role: 'student', semester: 4, password: 'studentpassword' },
-  { usn: '1RG24CS100', role: 'student', semester: 2, password: 'studentpassword' },
-  { usn: '1RG24CS101', role: 'student', semester: 2, password: 'studentpassword' },
-  { usn: '1RG21CS200', role: 'student', semester: 8, password: 'studentpassword' },
+  { usn: 'RONEEL1244', role: 'admin', semester: 0, password: 'pass@000' }, // Single admin
 ];
 
+// Initial Mock Tasks (kept for demonstration, adjust as needed if no students exist initially)
 const initialMockTasks: Task[] = [
- { id: '1-1RG22CS002', title: '6th Sem Project Proposal', description: 'Finalize and submit the project proposal document.', dueDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000), status: TaskStatus.ToBeStarted, assignedBy: '1RG22CS001', usn: '1RG22CS002', semester: 6 },
-  { id: '2-1RG22CS003', title: '6th Sem Study for Midterm', description: 'Review chapters 1-5 for the upcoming exam.', dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000), status: TaskStatus.InProgress, assignedBy: '1RG22CS001', usn: '1RG22CS003', semester: 6 },
-  { id: '3-1RG23CS050', title: '4th Sem Lab Assignment 3', description: 'Implement the algorithm described in the lab manual.', dueDate: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000), status: TaskStatus.Completed, assignedBy: 'TEACHER001', usn: '1RG23CS050', semester: 4 },
-   { id: '4-1RG23CS051', title: '4th Sem Prepare Presentation', description: 'Create slides for the group presentation.', dueDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000), status: TaskStatus.Submitted, assignedBy: 'TEACHER001', usn: '1RG23CS051', semester: 4, submissionUrl: 'https://example.com/submissions/4-1RG23CS051/presentation.pptx', submittedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) },
-   { id: '5-1RG24CS100', title: '2nd Sem Read Research Paper', description: 'Analyze the assigned research paper.', dueDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000), status: TaskStatus.Done, assignedBy: 'TEACHER001', usn: '1RG24CS100', semester: 2, completedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000) },
-   { id: '6-1RG21CS200', title: '8th Sem Code Review', description: 'Participate in the peer code review.', dueDate: new Date(Date.now() + 3 * 60 * 60 * 1000), status: TaskStatus.ToBeStarted, assignedBy: '1RG22CS001', usn: '1RG21CS200', semester: 8 },
-   // Task assigned to 'all' students of a specific semester (example task, won't show on student board directly)
-   // { id: 'all-sem6-task1', title: 'All 6th Sem: Ethics Quiz', description: 'Complete the online ethics quiz.', dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), status: TaskStatus.ToBeStarted, assignedBy: '1RG22CS001', usn: 'all', semester: 6 },
+ // Example task - won't be assigned if no students exist initially
+ // { id: 'example-task-1', title: 'Example Task', description: 'This is a sample task.', dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), status: TaskStatus.ToBeStarted, assignedBy: 'RONEEL1244', usn: 'UNKNOWN', semester: 1 },
 ];
 
 
@@ -96,7 +83,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
      const serializeUsers = (usersToSerialize: User[]): string => {
         // Remove password before saving
-        return JSON.stringify(usersToSerialize.map(({ password, ...user }) => user));
+        // Ensure USN is uppercase before serializing
+        return JSON.stringify(usersToSerialize.map(({ password, ...user }) => ({
+            ...user,
+            usn: user.usn.toUpperCase(), // Ensure USN is uppercase
+        })));
      };
 
       const deserializeUsers = (usersString: string | null): User[] => {
@@ -104,6 +95,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         try {
             return JSON.parse(usersString).map((user: any) => ({
                 ...user,
+                usn: user.usn.toUpperCase(), // Ensure USN is uppercase on deserialization too
                 // Ensure semester is number, default if missing/invalid
                 semester: typeof user.semester === 'number' ? user.semester : 0,
                 // Password is not stored/retrieved here for security simulation
@@ -128,13 +120,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
         if (loadedUsers.length === 0) {
             // If storage empty, use initial mock (which includes passwords)
-            setMockUsers(initialMockUsers); // State now has users with passwords
-            localStorage.setItem('uniTaskMockUsers', serializeUsers(initialMockUsers)); // Save without passwords
+            // Ensure initial mock USNs are uppercase
+            const uppercaseInitialUsers = initialMockUsers.map(u => ({...u, usn: u.usn.toUpperCase()}));
+            setMockUsers(uppercaseInitialUsers); // State now has users with passwords
+            localStorage.setItem('uniTaskMockUsers', serializeUsers(uppercaseInitialUsers)); // Save without passwords
         } else {
             // Merge stored users (no passwords) with initial mock (has passwords)
             // to retain passwords for login simulation without storing them plain
              const usersWithPasswords = loadedUsers.map(loadedUser => {
-                 const initialUser = initialMockUsers.find(u => u.usn === loadedUser.usn);
+                 // Ensure initial mock USNs are uppercase for comparison
+                 const uppercaseInitialUsers = initialMockUsers.map(u => ({...u, usn: u.usn.toUpperCase()}));
+                 const initialUser = uppercaseInitialUsers.find(u => u.usn === loadedUser.usn); // Compare uppercase USNs
                  return { ...loadedUser, password: initialUser?.password };
              });
             setMockUsers(usersWithPasswords);
@@ -157,9 +153,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const storedUser = localStorage.getItem('uniTaskUser');
         if (storedUser) {
           const parsedUser = JSON.parse(storedUser);
-           // Ensure semester is correctly loaded for the session user
+           // Ensure semester is correctly loaded and USN is uppercase for the session user
           setUser({
               ...parsedUser,
+              usn: parsedUser.usn.toUpperCase(),
               semester: typeof parsedUser.semester === 'number' ? parsedUser.semester : 0,
           });
         }
@@ -169,8 +166,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
         localStorage.removeItem('uniTaskUser');
         localStorage.removeItem('uniTaskMockUsers');
         localStorage.removeItem('uniTaskTasks');
-        setMockUsers(initialMockUsers); // Reset to initial state (with passwords)
-        localStorage.setItem('uniTaskMockUsers', serializeUsers(initialMockUsers)); // Save without passwords
+         // Ensure initial mock USNs are uppercase
+        const uppercaseInitialUsers = initialMockUsers.map(u => ({...u, usn: u.usn.toUpperCase()}));
+        setMockUsers(uppercaseInitialUsers); // Reset to initial state (with passwords)
+        localStorage.setItem('uniTaskMockUsers', serializeUsers(uppercaseInitialUsers)); // Save without passwords
         setTasks(initialMockTasks); // Reset tasks
         localStorage.setItem('uniTaskTasks', serializeTasks(initialMockTasks));
       } finally {
@@ -184,22 +183,27 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Helper function to save mock users to localStorage (removes passwords)
   const saveMockUsers = useCallback((updatedUsers: User[]) => {
-    setMockUsers(updatedUsers); // Keep passwords in runtime state
-    localStorage.setItem('uniTaskMockUsers', serializeUsers(updatedUsers)); // Save without passwords
+    // Ensure USN is uppercase before saving state and local storage
+    const uppercaseUsers = updatedUsers.map(u => ({...u, usn: u.usn.toUpperCase()}));
+    setMockUsers(uppercaseUsers); // Keep passwords in runtime state
+    localStorage.setItem('uniTaskMockUsers', serializeUsers(uppercaseUsers)); // Save without passwords
   }, []);
 
     // Helper function to save tasks to localStorage
   const saveTasks = useCallback((updatedTasks: Task[]) => {
-    setTasks(updatedTasks);
-    localStorage.setItem('uniTaskTasks', serializeTasks(updatedTasks));
+     // Ensure USN in tasks is uppercase before saving
+    const uppercaseTasks = updatedTasks.map(t => ({...t, usn: t.usn.toUpperCase()}));
+    setTasks(uppercaseTasks);
+    localStorage.setItem('uniTaskTasks', serializeTasks(uppercaseTasks));
   }, []);
 
 
-  const login = async (usn: string, password?: string): Promise<void> => {
+  const login = async (usnInput: string, password?: string): Promise<void> => {
+    const usn = usnInput.toUpperCase(); // Ensure USN is uppercase
     setLoading(true);
     await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
 
-    const foundUser = mockUsers.find(u => u.usn.toUpperCase() === usn.toUpperCase());
+    const foundUser = mockUsers.find(u => u.usn === usn); // Already uppercase in mockUsers
 
     if (!foundUser) {
       setLoading(false);
@@ -210,7 +214,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // Allow login without password if none is set (useful for initial setup/testing)
     if (!foundUser.password || foundUser.password === password) {
       const { password: _, ...userToStore } = foundUser;
-      setUser(userToStore); // Update runtime user state
+      setUser(userToStore); // Update runtime user state (USN already uppercase)
       localStorage.setItem('uniTaskUser', JSON.stringify(userToStore)); // Save user session (without password)
       setLoading(false);
     } else {
@@ -219,11 +223,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
-  const register = async (usn: string, semester: number, password?: string): Promise<void> => {
+  const register = async (usnInput: string, semester: number, password?: string): Promise<void> => {
+    const usn = usnInput.toUpperCase(); // Ensure USN is uppercase
     setLoading(true);
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    const existingUser = mockUsers.find(u => u.usn.toUpperCase() === usn.toUpperCase());
+    const existingUser = mockUsers.find(u => u.usn === usn); // Compare with uppercase USNs
     if (existingUser) {
       setLoading(false);
       throw new Error("USN already registered.");
@@ -241,31 +246,32 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
 
     const newUser: User = {
-      usn: usn.toUpperCase(),
+      usn: usn, // Already uppercase
       role: 'student',
       semester: semester, // Assign semester
       password: password, // Store password in runtime state for login check
     };
 
     const updatedUsers = [...mockUsers, newUser];
-    saveMockUsers(updatedUsers); // Saves to state (with pw) and localStorage (without pw)
+    saveMockUsers(updatedUsers); // Saves to state (with pw) and localStorage (without pw), handles uppercase
 
     setLoading(false);
   };
 
 
-  const updateUserRole = async (usn: string, role: 'student' | 'admin'): Promise<void> => {
+  const updateUserRole = async (usnInput: string, role: 'student' | 'admin'): Promise<void> => {
+    const usn = usnInput.toUpperCase(); // Ensure USN is uppercase
     if (user?.role !== 'admin') {
         throw new Error("Permission denied. Only administrators can change user roles.");
     }
-     if (user?.usn.toUpperCase() === usn.toUpperCase()) {
+     if (user?.usn === usn) { // Compare uppercase USNs
        throw new Error("Administrators cannot change their own role.");
      }
 
     setLoading(true);
     await new Promise(resolve => setTimeout(resolve, 300));
 
-    const userIndex = mockUsers.findIndex(u => u.usn.toUpperCase() === usn.toUpperCase());
+    const userIndex = mockUsers.findIndex(u => u.usn === usn); // Find using uppercase USN
 
     if (userIndex === -1) {
       setLoading(false);
@@ -276,7 +282,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // Also ensure semester is preserved (or potentially allow admin to change it too?)
     updatedUsers[userIndex] = { ...updatedUsers[userIndex], role: role };
 
-    saveMockUsers(updatedUsers);
+    saveMockUsers(updatedUsers); // Handles uppercase
 
     // If the currently logged-in admin modifies *another* user who happens to be logged in elsewhere,
     // their session data won't update automatically here. This implementation only updates the modifier's session
@@ -291,7 +297,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         throw new Error("Permission denied. Only administrators can view user list.");
     }
      await new Promise(resolve => setTimeout(resolve, 300));
-     // Return users without passwords from the runtime state
+     // Return users without passwords from the runtime state (already uppercase)
      return mockUsers.map(({ password, ...userWithoutPassword }) => userWithoutPassword);
   }
 
@@ -317,14 +323,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return u; // Keep admins and others unchanged
     });
 
-    saveMockUsers(updatedUsers); // Save the updated user list
+    saveMockUsers(updatedUsers); // Save the updated user list (handles uppercase)
 
      // If the current logged-in user is a student who got promoted, update their session
     if (user && user.role === 'student' && user.semester < 8) {
-        const updatedLoggedInUser = updatedUsers.find(u => u.usn === user.usn);
+        const updatedLoggedInUser = updatedUsers.find(u => u.usn === user.usn); // Find using uppercase USN
         if (updatedLoggedInUser) {
             const { password: _, ...userToStore } = updatedLoggedInUser;
-            setUser(userToStore); // Update runtime user state
+            setUser(userToStore); // Update runtime user state (USN already uppercase)
             localStorage.setItem('uniTaskUser', JSON.stringify(userToStore)); // Update session storage
         }
     }
@@ -358,9 +364,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const updatedTasks = [...tasks];
      // Ensure semester isn't accidentally overwritten if not included in updates
     const currentSemester = updatedTasks[taskIndex].semester;
+    // Ensure updated USN is uppercase if provided
+    const updatedUsn = updates.usn ? updates.usn.toUpperCase() : updatedTasks[taskIndex].usn;
+
     updatedTasks[taskIndex] = {
         ...updatedTasks[taskIndex],
         ...updates,
+        usn: updatedUsn, // Ensure USN is uppercase
         semester: updates.semester ?? currentSemester, // Preserve semester if not explicitly updated
     };
 
@@ -383,7 +393,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
 
-    saveTasks(updatedTasks);
+    saveTasks(updatedTasks); // Handles uppercase for tasks
     setTasksLoading(false);
   };
 
@@ -397,16 +407,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setTasksLoading(true);
       await new Promise(resolve => setTimeout(resolve, 200)); // Simulate creation delay
 
+       // Ensure new task USN is uppercase
+      const taskToAdd = {...newTask, usn: newTask.usn.toUpperCase()};
+
       // Basic validation: check if ID already exists
-      if (tasks.some(task => task.id === newTask.id)) {
-          console.warn(`Task with ID ${newTask.id} already exists. Skipping.`);
+      if (tasks.some(task => task.id === taskToAdd.id)) {
+          console.warn(`Task with ID ${taskToAdd.id} already exists. Skipping.`);
           setTasksLoading(false);
           // Optionally throw an error or handle differently
           return;
       }
 
-      const updatedTasks = [...tasks, newTask];
-      saveTasks(updatedTasks);
+      const updatedTasks = [...tasks, taskToAdd];
+      saveTasks(updatedTasks); // Handles uppercase
       setTasksLoading(false);
   }
 
@@ -416,27 +429,30 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
       if (newTasks.length === 0) return;
 
-       // Validate all tasks have a valid semester
+       // Ensure all new tasks have uppercase USNs and valid semesters
+       const tasksToAdd: Task[] = [];
        for (const task of newTasks) {
            if (typeof task.semester !== 'number' || task.semester < 1 || task.semester > 8) {
                throw new Error(`Invalid or missing semester for task "${task.title}".`);
            }
+           tasksToAdd.push({...task, usn: task.usn.toUpperCase()});
        }
 
+
       setTasksLoading(true);
-      await new Promise(resolve => setTimeout(resolve, 200 + newTasks.length * 10)); // Slightly longer delay for multiple
+      await new Promise(resolve => setTimeout(resolve, 200 + tasksToAdd.length * 10)); // Slightly longer delay for multiple
 
        // Filter out duplicates based on ID before adding
       const existingIds = new Set(tasks.map(t => t.id));
-      const uniqueNewTasks = newTasks.filter(nt => !existingIds.has(nt.id));
+      const uniqueNewTasks = tasksToAdd.filter(nt => !existingIds.has(nt.id));
 
-      if (uniqueNewTasks.length !== newTasks.length) {
+      if (uniqueNewTasks.length !== tasksToAdd.length) {
           console.warn("Some tasks were duplicates and skipped.");
       }
 
       if (uniqueNewTasks.length > 0) {
           const updatedTasks = [...tasks, ...uniqueNewTasks];
-          saveTasks(updatedTasks);
+          saveTasks(updatedTasks); // Handles uppercase
       }
 
       setTasksLoading(false);
@@ -455,7 +471,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
          console.warn(`Task with ID ${taskId} not found for deletion.`);
        }
 
-      saveTasks(updatedTasks);
+      saveTasks(updatedTasks); // Handles uppercase
       setTasksLoading(false);
   }
 

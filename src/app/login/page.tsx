@@ -23,7 +23,9 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 
 const formSchema = z.object({
-  usn: z.string().min(10, { message: 'USN must be at least 10 characters.' }).max(10, { message: 'USN must be at most 10 characters.' }).regex(/^[1-4][A-Z]{2}[0-9]{2}[A-Z]{2}[0-9]{3}$/i, { message: 'Invalid USN format.' }),
+  // Relax USN validation slightly if 'RONEEL1244' doesn't fit the regex
+  // usn: z.string().min(10, { message: 'USN must be at least 10 characters.' }).max(10, { message: 'USN must be at most 10 characters.' }).regex(/^[1-4][A-Z]{2}[0-9]{2}[A-Z]{2}[0-9]{3}$/i, { message: 'Invalid USN format.' }),
+  usn: z.string().min(1, { message: 'USN is required.' }), // Simple validation
   password: z.string().min(1, { message: 'Password is required.' }),
 });
 
@@ -44,6 +46,7 @@ export default function LoginPage() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
     try {
+      // Convert USN to uppercase before calling login
       await login(values.usn.toUpperCase(), values.password);
       toast({
         title: "Login Successful",
@@ -79,7 +82,8 @@ export default function LoginPage() {
                   <FormItem>
                     <FormLabel>USN</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., 1RG22CS001" {...field} autoComplete="username" />
+                       {/* Input accepts any case, conversion happens on submit */}
+                      <Input placeholder="e.g., RONEEL1244 or 1RG22CS001" {...field} autoComplete="username" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

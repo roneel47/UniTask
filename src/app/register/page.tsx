@@ -30,7 +30,9 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 
 const formSchema = z.object({
-  usn: z.string().min(10, { message: 'USN must be at least 10 characters.' }).max(10, { message: 'USN must be at most 10 characters.' }).regex(/^[1-4][A-Z]{2}[0-9]{2}[A-Z]{2}[0-9]{3}$/i, { message: 'Invalid USN format.' }),
+  // Relax USN validation slightly if 'RONEEL1244' doesn't fit the regex
+  // usn: z.string().min(10, { message: 'USN must be at least 10 characters.' }).max(10, { message: 'USN must be at most 10 characters.' }).regex(/^[1-4][A-Z]{2}[0-9]{2}[A-Z]{2}[0-9]{3}$/i, { message: 'Invalid USN format.' }),
+  usn: z.string().min(1, { message: 'USN is required.' }), // Simple validation
   password: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
   confirmPassword: z.string(),
   semester: z.string().refine(val => /^[1-8]$/.test(val), { message: 'Semester must be between 1 and 8.' }), // Add semester validation
@@ -64,7 +66,7 @@ export default function RegisterPage() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
     try {
-      // Pass semester to register function
+      // Pass semester to register function and ensure USN is uppercase
       await register(values.usn.toUpperCase(), parseInt(values.semester, 10), values.password);
       toast({
         title: "Registration Successful",
@@ -114,6 +116,7 @@ export default function RegisterPage() {
                   <FormItem>
                     <FormLabel>USN</FormLabel>
                     <FormControl>
+                       {/* Input accepts any case, conversion happens on submit */}
                       <Input placeholder="e.g., 1RG22CS001" {...field} autoComplete="username" />
                     </FormControl>
                     <FormMessage />
