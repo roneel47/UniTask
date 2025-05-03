@@ -5,7 +5,7 @@ import { useContext } from 'react';
 import { AuthContext } from '@/components/auth/auth-provider';
 
 // Define the master admin USN (must be uppercase) - duplicated here for easy access if needed, though ideally defined centrally
-const MASTER_ADMIN_USN = 'RONEEL1244';
+const MASTER_ADMIN_USN = 'RONEELV1244'; // Updated Master Admin USN
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -54,3 +54,5 @@ export const useAuth = () => {
     isMasterAdmin, // Return master admin status
   };
 };
+
+    

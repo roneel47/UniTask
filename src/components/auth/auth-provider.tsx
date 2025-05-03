@@ -6,7 +6,7 @@ import { User } from '@/types/user';
 import { Task, TaskStatus } from '@/types/task'; // Import Task types
 
 // Define the master admin USN (must be uppercase)
-const MASTER_ADMIN_USN = 'RONEEL1244';
+const MASTER_ADMIN_USN = 'RONEELV1244'; // Updated Master Admin USN
 
 // Define the shape of the authentication context
 interface AuthContextType {
@@ -39,7 +39,7 @@ interface AuthProviderProps {
 // Only one admin initially
 const initialMockUsers: User[] = [
   // Ensure the master admin USN is uppercase here
-  { usn: MASTER_ADMIN_USN, role: 'admin', semester: 0, password: 'pass@000' }, // Single admin
+  { usn: MASTER_ADMIN_USN, role: 'admin', semester: 0, password: 'Pass@123' }, // Updated password
 ];
 
 // Initial Mock Tasks (kept for demonstration, adjust as needed if no students exist initially)
@@ -545,3 +545,5 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
+
+    
