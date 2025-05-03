@@ -30,14 +30,10 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 
 const formSchema = z.object({
-  // Relax USN validation slightly if 'RONEEL1244' doesn't fit the regex
-  // usn: z.string().min(10, { message: 'USN must be at least 10 characters.' }).max(10, { message: 'USN must be at most 10 characters.' }).regex(/^[1-4][A-Z]{2}[0-9]{2}[A-Z]{2}[0-9]{3}$/i, { message: 'Invalid USN format.' }),
-  usn: z.string().min(1, { message: 'USN is required.' }), // Simple validation
+  usn: z.string().min(1, { message: 'USN is required.' }).regex(/^[A-Z0-9]+$/, { message: 'USN must be uppercase alphanumeric.' }), // Enforce uppercase
   password: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
   confirmPassword: z.string(),
   semester: z.string().refine(val => /^[1-8]$/.test(val), { message: 'Semester must be between 1 and 8.' }), // Add semester validation
-  // Optional fields, can add later
-  // name: z.string().min(1, { message: 'Name is required.' }),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"], // path of error
@@ -59,15 +55,14 @@ export default function RegisterPage() {
       password: '',
       confirmPassword: '',
       semester: '', // Default semester value
-      // name: '',
     },
   });
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
     try {
-      // Pass semester to register function and ensure USN is uppercase
-      await register(values.usn.toUpperCase(), parseInt(values.semester, 10), values.password);
+      // USN is already uppercase due to input handling
+      await register(values.usn, parseInt(values.semester, 10), values.password);
       toast({
         title: "Registration Successful",
         description: "You can now log in.",
@@ -95,20 +90,6 @@ export default function RegisterPage() {
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              {/* Optional Name Field */}
-              {/* <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Full Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Your Name" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              /> */}
               <FormField
                 control={form.control}
                 name="usn"
@@ -116,8 +97,13 @@ export default function RegisterPage() {
                   <FormItem>
                     <FormLabel>USN</FormLabel>
                     <FormControl>
-                       {/* Input accepts any case, conversion happens on submit */}
-                      <Input placeholder="e.g., 1RG22CS001" {...field} autoComplete="username" />
+                      <Input
+                        placeholder="e.g., 1RG22CS001"
+                        {...field}
+                        onChange={(e) => field.onChange(e.target.value.toUpperCase())} // Convert to uppercase on change
+                        autoComplete="username"
+                        className="uppercase" // Visually hint that it's uppercase
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
