@@ -64,6 +64,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         dueDate: task.dueDate.toISOString(),
         submittedAt: task.submittedAt?.toISOString(),
         completedAt: task.completedAt?.toISOString(),
+        // assignedByName is already a string, no conversion needed
         })));
     };
 
@@ -82,6 +83,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
             // Ensure USNs in tasks are uppercase
             usn: task.usn?.toUpperCase() ?? '',
             assignedBy: task.assignedBy?.toUpperCase() ?? '',
+            assignedByName: task.assignedByName ?? '', // Deserialize assignedByName
         }));
         } catch (error) {
         console.error("Failed to parse tasks from storage:", error);
@@ -182,13 +184,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
         // Load tasks
         const storedTasks = localStorage.getItem('uniTaskTasks');
-        const loadedTasks = deserializeTasks(storedTasks);
+        const loadedTasks = deserializeTasks(storedTasks); // Deserializes assignedByName
         if (loadedTasks.length > 0) {
              setTasks(loadedTasks);
         } else {
             // Initialize with default mock tasks if storage is empty/invalid
              setTasks(initialMockTasks);
-             localStorage.setItem('uniTaskTasks', serializeTasks(initialMockTasks));
+             localStorage.setItem('uniTaskTasks', serializeTasks(initialMockTasks)); // Serializes assignedByName
         }
 
 
@@ -246,9 +248,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
         usn: t.usn.toUpperCase(),
         assignedBy: t.assignedBy.toUpperCase(),
         semester: typeof t.semester === 'number' ? t.semester : (t.semester === null ? null : 0), // Handle null semester
+        assignedByName: t.assignedByName ?? '', // Ensure assignedByName exists
     }));
     setTasks(processedTasks);
-    localStorage.setItem('uniTaskTasks', serializeTasks(processedTasks));
+    localStorage.setItem('uniTaskTasks', serializeTasks(processedTasks)); // Serializes assignedByName
   }, []);
 
 
@@ -518,6 +521,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const updatedUsn = updates.usn ? updates.usn.toUpperCase() : updatedTasks[taskIndex].usn;
     // Ensure assignedBy is uppercase if provided
     const updatedAssignedBy = updates.assignedBy ? updates.assignedBy.toUpperCase() : updatedTasks[taskIndex].assignedBy;
+    // Preserve assignedByName if not explicitly updated
+    const updatedAssignedByName = updates.assignedByName ?? updatedTasks[taskIndex].assignedByName;
 
 
     updatedTasks[taskIndex] = {
@@ -525,6 +530,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         ...updates,
         usn: updatedUsn, // Ensure USN is uppercase
         assignedBy: updatedAssignedBy, // Ensure assignedBy is uppercase
+        assignedByName: updatedAssignedByName, // Include assignedByName
         // Preserve semester if not explicitly updated, handle null
         semester: updates.semester !== undefined ? updates.semester : currentSemester,
     };
@@ -548,7 +554,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
 
-    saveTasks(updatedTasks); // Handles uppercase for tasks & semester validity
+    saveTasks(updatedTasks); // Handles uppercase for tasks, semester validity, and assignedByName
     setTasksLoading(false);
   };
 
@@ -560,6 +566,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
        if (newTask.semester !== null && (typeof newTask.semester !== 'number' || newTask.semester < 1 || newTask.semester > 8)) {
             throw new Error("Invalid or missing semester for the new task.");
         }
+       if (!newTask.assignedByName) { // Validate assignedByName
+           throw new Error("Missing 'Assigned By Name' for the new task.");
+       }
       setTasksLoading(true);
       await new Promise(resolve => setTimeout(resolve, 200)); // Simulate creation delay
 
@@ -568,6 +577,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         ...newTask,
         usn: newTask.usn.toUpperCase(),
         assignedBy: newTask.assignedBy.toUpperCase(),
+        assignedByName: newTask.assignedByName, // Already validated
         semester: typeof newTask.semester === 'number' ? newTask.semester : (newTask.semester === null ? null : 0),
       };
 
@@ -580,7 +590,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
 
       const updatedTasks = [...tasks, taskToAdd];
-      saveTasks(updatedTasks); // Handles uppercase & semester validity
+      saveTasks(updatedTasks); // Handles uppercase, semester validity, and assignedByName
       setTasksLoading(false);
   }
 
@@ -590,16 +600,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
       if (newTasks.length === 0) return;
 
-       // Ensure all new tasks have uppercase USNs and assignedBy, and valid semesters (number 1-8 or null)
+       // Ensure all new tasks have uppercase USNs and assignedBy, valid semesters, and assignedByName
        const tasksToAdd: Task[] = [];
        for (const task of newTasks) {
             if (task.semester !== null && (typeof task.semester !== 'number' || task.semester < 1 || task.semester > 8)) {
                throw new Error(`Invalid or missing semester for task "${task.title}". Must be 1-8 or null.`);
            }
+            if (!task.assignedByName) { // Validate assignedByName for each task
+                throw new Error(`Missing 'Assigned By Name' for task "${task.title}".`);
+            }
            tasksToAdd.push({
             ...task,
             usn: task.usn.toUpperCase(),
             assignedBy: task.assignedBy.toUpperCase(),
+            assignedByName: task.assignedByName, // Already validated
             semester: typeof task.semester === 'number' ? task.semester : (task.semester === null ? null : 0), // Ensure correct type
             });
        }
@@ -618,7 +632,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       if (uniqueNewTasks.length > 0) {
           const updatedTasks = [...tasks, ...uniqueNewTasks];
-          saveTasks(updatedTasks); // Handles uppercase & semester validity
+          saveTasks(updatedTasks); // Handles uppercase, semester validity, and assignedByName
       }
 
       setTasksLoading(false);

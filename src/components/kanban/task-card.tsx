@@ -6,7 +6,7 @@ import { Task, TaskStatus } from '@/types/task';
 import { Badge } from '@/components/ui/badge';
 import { getDueDateColor, formatDueDate } from '@/lib/date-utils';
 import { Button } from '@/components/ui/button';
-import { Upload, Download, Edit, Trash2, Paperclip, CheckCircle, Clock, Loader2, User, BookCopy, UserCog } from 'lucide-react'; // Added UserCog icon
+import { Upload, Download, Edit, Trash2, Paperclip, CheckCircle, Clock, Loader2, User, BookCopy, UserCog, Award } from 'lucide-react'; // Added Award icon
 import {
   Tooltip,
   TooltipContent,
@@ -208,8 +208,19 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
           {isExpanded && (
              <CardContent className="p-3 pt-0 text-sm text-muted-foreground">
                 <p className="whitespace-pre-wrap">{task.description}</p> {/* Preserve whitespace */}
-                 {/* Ensure assignedBy USN is uppercase */}
-                <p className="text-xs mt-2">Assigned by: {task.assignedBy.toUpperCase()}</p>
+                 {/* Display Assigned By Name */}
+                 {task.assignedByName && (
+                     <p className="text-xs mt-2 flex items-center">
+                         <Award className="h-3 w-3 mr-1" />
+                         Assigned by: {task.assignedByName}
+                         {!isAdmin && ` (${task.assignedBy.toUpperCase()})`} {/* Show USN for student only */}
+                     </p>
+                 )}
+                 {/* Fallback if assignedByName is missing (shouldn't happen ideally) */}
+                 {!task.assignedByName && (
+                      <p className="text-xs mt-2">Assigned by: {task.assignedBy.toUpperCase()}</p>
+                 )}
+
                  {task.submittedAt && (
                     <TooltipProvider>
                         <Tooltip>

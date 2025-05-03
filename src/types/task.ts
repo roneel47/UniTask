@@ -13,8 +13,9 @@ export interface Task {
   description: string;
   dueDate: Date; // Ensure this is Date
   status: TaskStatus;
-  assignedBy: string; // Admin's USN or name
-  usn: string; // Student USN this task instance is for
+  assignedBy: string; // Admin's USN (must be uppercase)
+  assignedByName?: string; // Optional: Admin's Display Name/Title (e.g., "Prof. Smith", "CR") - NEW FIELD
+  usn: string; // Student USN this task instance is for (must be uppercase)
   semester: number | null; // Allow semester to be null
   attachmentUrl?: string; // URL for admin-provided attachment
   submissionUrl?: string; // URL for student-submitted file

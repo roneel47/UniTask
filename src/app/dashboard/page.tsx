@@ -1,13 +1,13 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { KanbanBoard } from '@/components/kanban/kanban-board';
 import { Task, TaskStatus } from '@/types/task';
 import { User } from '@/types/user'; // Import User type
 import { Button } from '@/components/ui/button';
-import { Plus, Loader2, Filter, BookCopy, Columns } from 'lucide-react'; // Added Columns icon
+import { Plus, Loader2, Filter, BookCopy, Columns, ListTodo, Play, Check, CheckCheck, Inbox } from 'lucide-react'; // Added task status icons
 import { CreateTaskDialog } from '@/components/kanban/create-task-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from '@/components/ui/label';
 import { LoadingSpinner } from '@/components/layout/loading-spinner'; // Import loading spinner
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'; // Added Card for counts
 
 // Define semester options (1-8 and N/A for admins without semester)
 const semesterOptions = [...Array.from({ length: 8 }, (_, i) => String(i + 1)), 'N/A'];
@@ -276,6 +277,23 @@ export default function DashboardPage() {
     return false; // Default case
   });
 
+   // Calculate task counts based on filteredTasks
+   const taskCounts = useMemo(() => {
+     const counts = {
+       total: filteredTasks.length,
+       [TaskStatus.ToBeStarted]: 0,
+       [TaskStatus.InProgress]: 0,
+       [TaskStatus.Completed]: 0, // Added count for Completed
+       [TaskStatus.Submitted]: 0,
+       [TaskStatus.Done]: 0,
+     };
+     filteredTasks.forEach(task => {
+       counts[task.status]++;
+     });
+     return counts;
+   }, [filteredTasks]);
+
+
 
   return (
     <div className="container mx-auto p-4 pt-8">
@@ -368,8 +386,79 @@ export default function DashboardPage() {
          </Alert>
        )}
 
+       {/* Task Counts (only if tasks are visible) */}
+        {(user?.role === 'student' || (user?.role === 'admin' && selectedSemesterFilter && selectedUsnFilter)) && !tasksLoading && (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-6">
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Total Tasks</CardTitle>
+                    <Inbox className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{taskCounts.total}</div>
+                        <p className="text-xs text-muted-foreground">Visible tasks</p>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">{TaskStatus.ToBeStarted}</CardTitle>
+                    <ListTodo className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                    <div className="text-2xl font-bold">{taskCounts[TaskStatus.ToBeStarted]}</div>
+                    </CardContent>
+                </Card>
+                 <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">{TaskStatus.InProgress}</CardTitle>
+                    <Play className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                    <div className="text-2xl font-bold">{taskCounts[TaskStatus.InProgress]}</div>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">{TaskStatus.Submitted}</CardTitle>
+                    <Check className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                    <div className="text-2xl font-bold">{taskCounts[TaskStatus.Submitted]}</div>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">{TaskStatus.Done}</CardTitle>
+                    <CheckCheck className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                    <div className="text-2xl font-bold">{taskCounts[TaskStatus.Done]}</div>
+                    </CardContent>
+                </Card>
+                {/* Add Card for Completed status if needed */}
+                {/* <Card> ... {TaskStatus.Completed} ... </Card> */}
+            </div>
+        )}
+         {/* Skeleton for Task Counts */}
+        {tasksLoading && (
+           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-6">
+               {[...Array(5)].map((_, i) => (
+                 <Card key={i}>
+                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                     <Skeleton className="h-4 w-24 bg-muted" />
+                     <Skeleton className="h-6 w-6 bg-muted" />
+                   </CardHeader>
+                   <CardContent>
+                     <Skeleton className="h-8 w-12 bg-muted mb-1" />
+                   </CardContent>
+                 </Card>
+               ))}
+           </div>
+        )}
+
+
       {tasksLoading ? (
-         <div className="flex flex-col items-center justify-center h-[calc(100vh-250px)] text-center">
+         <div className="flex flex-col items-center justify-center h-[calc(100vh-350px)] text-center"> {/* Adjusted height */}
               <LoadingSpinner size={48} />
               <p className="text-lg font-medium text-muted-foreground mt-4 animate-pulse">Loading tasks...</p>
          </div>
@@ -377,7 +466,7 @@ export default function DashboardPage() {
         <>
           {/* Message for admin if no semester is selected */}
           {user?.role === 'admin' && !selectedSemesterFilter && (
-            <div className="flex flex-col items-center justify-center h-[calc(100vh-250px)] text-center">
+            <div className="flex flex-col items-center justify-center h-[calc(100vh-350px)] text-center"> {/* Adjusted height */}
                <BookCopy className="h-12 w-12 text-muted-foreground mb-4" />
               <p className="text-lg font-medium text-muted-foreground">Select a semester</p>
               <p className="text-sm text-muted-foreground">Choose a semester (or N/A) from the dropdown above to view tasks.</p>
@@ -386,7 +475,7 @@ export default function DashboardPage() {
 
            {/* Message for admin if semester selected but no USN filter */}
            {user?.role === 'admin' && selectedSemesterFilter && !selectedUsnFilter && (
-             <div className="flex flex-col items-center justify-center h-[calc(100vh-250px)] text-center">
+             <div className="flex flex-col items-center justify-center h-[calc(100vh-350px)] text-center"> {/* Adjusted height */}
                <Filter className="h-12 w-12 text-muted-foreground mb-4" />
                <p className="text-lg font-medium text-muted-foreground">Select a user filter</p>
                 <p className="text-sm text-muted-foreground">
@@ -406,7 +495,7 @@ export default function DashboardPage() {
 
            {/* Message if filters selected but no tasks found */}
             {user?.role === 'admin' && selectedSemesterFilter && selectedUsnFilter && filteredTasks.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-[calc(100vh-250px)] text-center">
+              <div className="flex flex-col items-center justify-center h-[calc(100vh-350px)] text-center"> {/* Adjusted height */}
                    <Columns className="h-12 w-12 text-muted-foreground mb-4" />
                   <p className="text-lg font-medium text-muted-foreground">No tasks found</p>
                   <p className="text-sm text-muted-foreground">
@@ -420,7 +509,7 @@ export default function DashboardPage() {
 
              {/* Message if student has no tasks */}
             {user?.role === 'student' && filteredTasks.length === 0 && (
-                 <div className="flex flex-col items-center justify-center h-[calc(100vh-250px)] text-center">
+                 <div className="flex flex-col items-center justify-center h-[calc(100vh-350px)] text-center"> {/* Adjusted height */}
                      <Columns className="h-12 w-12 text-muted-foreground mb-4" />
                      <p className="text-lg font-medium text-muted-foreground">No tasks assigned</p>
                      <p className="text-sm text-muted-foreground">You currently have no tasks.</p>

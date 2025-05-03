@@ -52,6 +52,7 @@ const semesterOptions = [...Array.from({ length: 8 }, (_, i) => String(i + 1)), 
 const formSchema = z.object({
   title: z.string().min(1, { message: 'Title is required.' }),
   description: z.string().min(1, { message: 'Description is required.' }),
+  assignedByName: z.string().min(1, { message: 'Your name/title is required (e.g., Prof. Smith or CR).'}), // NEW FIELD
   dueDate: z.date({ required_error: 'Due date is required.' }),
   // Use 'usn' field to match the Task type and the receiving function's expected data
   usn: z.string().min(1, {message: "Specify who to assign to ('all' or USN)."} ),
@@ -68,6 +69,7 @@ export function CreateTaskDialog({ isOpen, onClose, onCreate, isLoading }: Creat
     defaultValues: {
       title: '',
       description: '',
+      assignedByName: '', // Default empty
       dueDate: undefined,
       usn: 'all', // Default to 'all' for the selected semester
       semester: '', // Default semester value
@@ -88,6 +90,7 @@ export function CreateTaskDialog({ isOpen, onClose, onCreate, isLoading }: Creat
         const taskData = {
             title: values.title,
             description: values.description,
+            assignedByName: values.assignedByName, // Include assignedByName
             dueDate: values.dueDate,
             usn: values.usn, // Use the 'usn' field from the form
              // Convert 'N/A' string to null, otherwise parse the number
@@ -143,6 +146,19 @@ export function CreateTaskDialog({ isOpen, onClose, onCreate, isLoading }: Creat
                 </FormItem>
               )}
             />
+            <FormField
+              control={form.control}
+              name="assignedByName"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Assigned By (Your Name/Title)</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g., Prof. Smith or Class Rep." {...field} disabled={isLoading} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
              <FormField
                 control={form.control}
                 name="semester"
@@ -174,7 +190,7 @@ export function CreateTaskDialog({ isOpen, onClose, onCreate, isLoading }: Creat
                 <FormItem>
                   <FormLabel>Assign To</FormLabel>
                   <FormControl>
-                     <Input placeholder="Enter 'all' or specific USN (e.g., 1RG22CS005)" {...field} disabled={isLoading} />
+                     <Input placeholder="Enter 'all' or specific USN (e.g., 1RG22CS005)" {...field} disabled={isLoading} className="uppercase"/>
                   </FormControl>
                    <FormMessage />
                     <p className="text-xs text-muted-foreground">Use 'all' to assign to all users in the selected semester/group.</p>
