@@ -33,7 +33,7 @@ import { format } from 'date-fns'; // Import format for submittedAt date
 interface TaskCardProps {
   task: Task;
   index: number;
-  isAdmin: boolean;
+  isAdmin: boolean; // True if current user is admin (regular or master)
   isDraggable: boolean; // To control drag permission based on status/role
 }
 
@@ -42,7 +42,7 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
     const [isDeleting, setIsDeleting] = useState(false); // State for delete loading
     const [isUploading, setIsUploading] = useState(false); // State for upload loading
     const dueDateColor = getDueDateColor(task.dueDate);
-    const { updateTask, deleteTask } = useAuth(); // Get context functions
+    const { updateTask, deleteTask, isMasterAdmin } = useAuth(); // Get context functions and master admin status
     const { toast } = useToast(); // Get toast function
 
     // --- Handlers using Context Functions ---
@@ -105,7 +105,7 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
       // This would typically involve:
       // 1. Opening a Dialog (similar to CreateTaskDialog but pre-filled).
       // 2. Calling `updateTask` from useAuth on successful save.
-      if (!isAdmin) return;
+      if (!isAdmin) return; // Only admins can edit (even if not implemented yet)
       console.log(`Edit requested for task ${task.id}`);
       toast({
           title: "Edit Not Implemented",
@@ -114,11 +114,13 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
     };
 
      const handleDeleteConfirm = async () => {
-        if (!isAdmin) return;
+        // Only allow delete if current user is the admin who assigned the task OR the master admin
+        // This check should ideally happen in the context function, but we can prevent UI trigger here too
+        if (!isAdmin) return; // Should not happen if button is hidden, but good practice
         setIsDeleting(true);
         console.log(`Deleting task ${task.id}`);
         try {
-            await deleteTask(task.id); // Call deleteTask from context
+            await deleteTask(task.id); // Call deleteTask from context (context should handle permission)
             toast({
                 title: "Task Deleted",
                 description: `Task "${task.title}" has been removed.`,
@@ -158,7 +160,7 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
             >
                 {task.title}
             </CardTitle>
-            {/* Display Assigned USN (uppercase) and Semester for Admin */}
+            {/* Display Assigned USN (uppercase) and Semester for ALL Admin views */}
             {isAdmin && (
                 <div className="flex items-center space-x-3 text-xs text-muted-foreground pt-1">
                     <span className="flex items-center">
@@ -208,21 +210,21 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
           {isExpanded && (
              <CardContent className="p-3 pt-0 text-sm text-muted-foreground">
                 <p className="whitespace-pre-wrap">{task.description}</p> {/* Preserve whitespace */}
-                 {/* Display Assigned By Name */}
-                 {task.assignedByName && (
-                     <p className="text-xs mt-2 flex items-center">
-                         <Award className="h-3 w-3 mr-1" />
-                         Assigned by: {task.assignedByName}
-                         {!isAdmin && ` (${task.assignedBy.toUpperCase()})`} {/* Show USN for student only */}
-                     </p>
-                 )}
-                 {/* Fallback if assignedByName is missing (shouldn't happen ideally) */}
-                 {!task.assignedByName && (
-                      <p className="text-xs mt-2 flex items-center">
-                          <UserCog className="h-3 w-3 mr-1" />
-                          Assigned by: {task.assignedBy.toUpperCase()}
-                      </p>
-                 )}
+                 {/* Display Assigned By Name and USN (USN only shown for master admin and student) */}
+                 <p className="text-xs mt-2 flex items-center">
+                     {task.assignedByName ? (
+                         <>
+                             <Award className="h-3 w-3 mr-1" />
+                             Assigned by: {task.assignedByName}
+                             {(isMasterAdmin || !isAdmin) && ` (${task.assignedBy.toUpperCase()})`} {/* Show USN for master admin or student */}
+                         </>
+                     ) : (
+                         <>
+                             <UserCog className="h-3 w-3 mr-1" />
+                             Assigned by: {task.assignedBy.toUpperCase()} {/* Fallback if name missing */}
+                         </>
+                     )}
+                 </p>
 
                  {task.submittedAt && (
                     <TooltipProvider>
@@ -310,7 +312,7 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
                  )}
             </div>
 
-             {/* Admin Actions */}
+             {/* Admin Actions (Regular and Master) */}
             {isAdmin && (
                 <div className="flex space-x-1">
                      <TooltipProvider>
@@ -326,7 +328,9 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
                         </Tooltip>
                     </TooltipProvider>
 
-                    {/* Delete Button with Confirmation */}
+                    {/* Delete Button with Confirmation (Visible to Master Admin and the Admin who assigned it) */}
+                    {/* Logic to show delete button might need refinement based on exact permission rules */}
+                    {/* Assuming for now deleteTask context handles permissions, show if isAdmin */}
                      <AlertDialog>
                          <TooltipProvider>
                             <Tooltip>

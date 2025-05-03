@@ -36,6 +36,7 @@ export default function DashboardPage() {
     updateTask,
     addMultipleTasks,
     getAllUsers,
+    isMasterAdmin, // Get master admin status
   } = useAuth();
 
   const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
@@ -54,6 +55,7 @@ export default function DashboardPage() {
    // Fetch all users for admin dropdowns
    useEffect(() => {
      const fetchUsers = async () => {
+       // Fetch users if admin (regular or master)
        if (user?.role === 'admin') {
          setIsFetchingUsers(true);
          try {
@@ -83,23 +85,23 @@ export default function DashboardPage() {
    // Update filtered student list when semester filter changes
    useEffect(() => {
        if (user?.role === 'admin' && selectedSemesterFilter) {
-            let studentsInFilter: User[];
+            let usersInFilter: User[];
             if (selectedSemesterFilter === 'N/A') {
                 // Filter for students/admins with null semester
-                 studentsInFilter = studentList.filter(
+                 usersInFilter = studentList.filter(
                    (u) => (u.role === 'student' || u.role === 'admin') && u.semester === null
                  );
             } else {
                  // Filter for students/admins in a specific numeric semester
                 const semesterNumber = parseInt(selectedSemesterFilter, 10);
-                studentsInFilter = studentList.filter(
+                usersInFilter = studentList.filter(
                     (u) => (u.role === 'student' || u.role === 'admin') && u.semester === semesterNumber
                 );
             }
 
            // Sort users by USN
-           studentsInFilter.sort((a, b) => a.usn.localeCompare(b.usn));
-           setFilteredStudentList(studentsInFilter);
+           usersInFilter.sort((a, b) => a.usn.localeCompare(b.usn));
+           setFilteredStudentList(usersInFilter);
            // Reset USN filter when semester changes, unless it's 'all'
            // Keep 'all' selected if it was already selected
            if (selectedUsnFilter !== 'all') {
@@ -236,54 +238,67 @@ export default function DashboardPage() {
 
 
   // Filter tasks based on role and selected filters (semester and USN)
-  // Ensure USN comparisons are case-insensitive or use consistently cased data
-  const filteredTasks = tasks.filter(task => {
-    if (!user) return false; // Should not happen due to layout guard
+  const filteredTasks = useMemo(() => {
+     if (!user) return []; // Should not happen due to layout guard
 
-    // Student view: Show tasks assigned to them (case-insensitive USN match)
-    if (user.role === 'student') {
-        // Context ensures user.usn and task.usn are uppercase
-        return task.usn === user.usn;
-    }
+     // --- Student View ---
+     if (user.role === 'student') {
+         // Context ensures user.usn and task.usn are uppercase
+         return tasks.filter(task => task.usn === user.usn);
+     }
 
-    // Admin view: Apply semester and USN filters
-    if (user.role === 'admin') {
-        // Only show tasks assigned BY the current admin
-        if (task.assignedBy !== user.usn) {
-            return false;
+     // --- Admin View (Regular or Master) ---
+     if (user.role === 'admin') {
+        // Require semester filter to be selected before showing any tasks
+        if (!selectedSemesterFilter || !selectedUsnFilter) {
+            return [];
         }
 
-        let semesterMatch = false;
-         // 1. Check semester filter
-        if (selectedSemesterFilter) {
-             if (selectedSemesterFilter === 'N/A') {
-                 semesterMatch = task.semester === null;
-             } else {
-                 semesterMatch = task.semester === parseInt(selectedSemesterFilter, 10);
-             }
-        }
+        // Determine target semester value (number or null)
+         const targetSemesterValue = selectedSemesterFilter === 'N/A' ? null : parseInt(selectedSemesterFilter, 10);
 
-        if (!semesterMatch && selectedSemesterFilter) {
-             return false; // Doesn't match selected semester filter
-        }
+         // --- Master Admin View: Shows tasks ASSIGNED TO the filtered user/semester ---
+         if (isMasterAdmin) {
+             return tasks.filter(task => {
+                 // 1. Match semester
+                 const semesterMatch = task.semester === targetSemesterValue;
+                 if (!semesterMatch) return false;
 
-         // 2. If semester filter is active (or implicitly 'all' semesters if none selected, though UI prevents this now), apply USN filter
-         if (selectedSemesterFilter) { // Only filter by USN if a semester filter is active
-            if (selectedUsnFilter === 'all') {
-                return true; // Show all tasks for the selected semester/N/A group assigned by this admin
-            }
-            if (selectedUsnFilter) {
-                // Show tasks for the specific user in the selected semester/N/A group assigned by this admin
-                // Context ensures task.usn is uppercase, selectedUsnFilter is also uppercase
-                return task.usn === selectedUsnFilter;
-            }
-             return false; // If semester is selected but no USN filter ('all' or specific), show nothing
+                 // 2. Match USN filter ('all' or specific)
+                 if (selectedUsnFilter === 'all') {
+                     return true; // Show all tasks for the selected semester assigned TO anyone
+                 } else {
+                     // Show tasks assigned TO the specific selected user
+                     return task.usn === selectedUsnFilter; // Both should be uppercase
+                 }
+             });
          }
-         return false; // If no semester is selected, show nothing by default for admin
-    }
+         // --- Regular Admin View: Shows tasks ASSIGNED BY this admin ---
+         else {
+             return tasks.filter(task => {
+                 // 1. Must be assigned BY the current admin
+                 if (task.assignedBy !== user.usn) { // Both should be uppercase
+                     return false;
+                 }
 
-    return false; // Default case
-  });
+                 // 2. Match semester
+                 const semesterMatch = task.semester === targetSemesterValue;
+                 if (!semesterMatch) return false;
+
+                 // 3. Match USN filter ('all' or specific)
+                 if (selectedUsnFilter === 'all') {
+                     return true; // Show all tasks assigned BY this admin for this semester
+                 } else {
+                     // Show tasks assigned BY this admin TO the specific selected user
+                     return task.usn === selectedUsnFilter; // Both should be uppercase
+                 }
+             });
+         }
+     }
+
+     return []; // Default case (shouldn't be reached)
+  }, [user, tasks, selectedSemesterFilter, selectedUsnFilter, isMasterAdmin]); // Added isMasterAdmin dependency
+
 
    // Calculate task counts based on filteredTasks
    const taskCounts = useMemo(() => {
@@ -308,10 +323,10 @@ export default function DashboardPage() {
        <div className="flex flex-col md:flex-row justify-between md:items-center mb-6 gap-4">
         <h1 className="text-2xl font-semibold text-primary">
           {/* Ensure user.usn and user.semester are displayed (handle null semester) */}
-          {user.role === 'admin'
-            ? `Admin Dashboard${user.semester !== null ? ` (Teacher - Sem ${user.semester})` : ' (Teacher)'}`
+           {user.role === 'admin'
+            ? `${isMasterAdmin ? 'Master Admin' : 'Admin'} Dashboard${user.semester !== null ? ` (Teacher - Sem ${user.semester})` : ' (Teacher)'}`
             : `Student Dashboard (${user.usn} - Sem ${user.semester === null ? 'N/A' : user.semester})`
-          }
+           }
         </h1>
         {/* Admin Controls: Create Task and Filters */}
         {user.role === 'admin' && (
@@ -345,7 +360,8 @@ export default function DashboardPage() {
                 <div className="flex items-center gap-2">
                    <Label htmlFor="user-filter" className="text-sm font-medium shrink-0">
                      <Filter className="inline-block h-4 w-4 mr-1 relative -top-px"/>
-                     User:
+                      {/* Slightly different label for master admin */}
+                     {isMasterAdmin ? 'View User:' : 'Assign Filter:'}
                    </Label>
                    <Select
                      value={selectedUsnFilter ?? ''}
@@ -377,11 +393,13 @@ export default function DashboardPage() {
             )}
 
 
-             {/* Create Task Button */}
-             <Button onClick={() => setIsCreateTaskOpen(true)} className="bg-accent text-accent-foreground hover:bg-accent/90 w-full sm:w-auto ml-auto" disabled={isCreatingTask}>
-               {isCreatingTask ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-               Create Task
-             </Button>
+             {/* Create Task Button (Not for Master Admin viewing others) */}
+             {!isMasterAdmin && (
+                 <Button onClick={() => setIsCreateTaskOpen(true)} className="bg-accent text-accent-foreground hover:bg-accent/90 w-full sm:w-auto ml-auto" disabled={isCreatingTask}>
+                   {isCreatingTask ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                   Create Task
+                 </Button>
+             )}
           </div>
         )}
       </div>
@@ -405,7 +423,10 @@ export default function DashboardPage() {
                     <CardContent>
                         <div className="text-2xl font-bold">{taskCounts.total}</div>
                         <p className="text-xs text-muted-foreground">
-                           {user.role === 'admin' ? `Assigned by you for filter` : 'Your assigned tasks'}
+                            {user.role === 'admin'
+                                ? (isMasterAdmin ? 'Tasks for selected filter' : 'Assigned by you for filter')
+                                : 'Your assigned tasks'
+                            }
                         </p>
                     </CardContent>
                 </Card>
@@ -479,7 +500,12 @@ export default function DashboardPage() {
             <div className="flex flex-col items-center justify-center h-[calc(100vh-350px)] text-center"> {/* Adjusted height */}
                <BookCopy className="h-12 w-12 text-muted-foreground mb-4" />
               <p className="text-lg font-medium text-muted-foreground">Select a semester</p>
-              <p className="text-sm text-muted-foreground">Choose a semester (or N/A) from the dropdown above to view tasks assigned by you.</p>
+              <p className="text-sm text-muted-foreground">
+                 {isMasterAdmin
+                    ? "Choose a semester (or N/A) to view tasks."
+                    : "Choose a semester (or N/A) to view tasks assigned by you."
+                 }
+              </p>
             </div>
           )}
 
@@ -489,7 +515,10 @@ export default function DashboardPage() {
                <Filter className="h-12 w-12 text-muted-foreground mb-4" />
                <p className="text-lg font-medium text-muted-foreground">Select a user filter</p>
                 <p className="text-sm text-muted-foreground">
-                   Choose 'All Users' or a specific user to view tasks assigned by you for {selectedSemesterFilter === 'N/A' ? 'N/A' : `Semester ${selectedSemesterFilter}`}.
+                    {isMasterAdmin
+                        ? `Choose 'All Users' or a specific user to view their tasks for ${selectedSemesterFilter === 'N/A' ? 'N/A' : `Semester ${selectedSemesterFilter}`}.`
+                        : `Choose 'All Users' or a specific user to view tasks assigned by you for ${selectedSemesterFilter === 'N/A' ? 'N/A' : `Semester ${selectedSemesterFilter}`}.`
+                    }
                 </p>
              </div>
            )}
@@ -497,9 +526,9 @@ export default function DashboardPage() {
            {/* Show Kanban board if student OR if admin has selected semester AND (usn or 'all') */}
            {(user?.role === 'student' || (user?.role === 'admin' && selectedSemesterFilter && selectedUsnFilter)) && (
             <KanbanBoard
-                tasks={filteredTasks} // Already filtered, USNs are uppercase
+                tasks={filteredTasks} // Already filtered based on role/filters
                 // onTaskMove handled internally
-                isAdmin={user.role === 'admin'}
+                 isAdmin={user.role === 'admin'} // Pass admin status (true for both regular and master admin)
              />
            )}
 
@@ -509,10 +538,16 @@ export default function DashboardPage() {
                    <Columns className="h-12 w-12 text-muted-foreground mb-4" />
                   <p className="text-lg font-medium text-muted-foreground">No tasks found</p>
                   <p className="text-sm text-muted-foreground">
-                     {selectedUsnFilter === 'all'
-                        ? `No tasks assigned by you found for ${selectedSemesterFilter === 'N/A' ? 'N/A' : `Semester ${selectedSemesterFilter}`}.`
-                       // Ensure displayed USN is uppercase
-                        : `No tasks assigned by you found for user ${selectedUsnFilter} in ${selectedSemesterFilter === 'N/A' ? 'N/A' : `Semester ${selectedSemesterFilter}`}.`}
+                      {isMasterAdmin
+                        ? (selectedUsnFilter === 'all'
+                            ? `No tasks found for ${selectedSemesterFilter === 'N/A' ? 'N/A' : `Semester ${selectedSemesterFilter}`}.`
+                            : `No tasks found for user ${selectedUsnFilter} in ${selectedSemesterFilter === 'N/A' ? 'N/A' : `Semester ${selectedSemesterFilter}`}.`
+                          )
+                        : (selectedUsnFilter === 'all'
+                            ? `No tasks assigned by you found for ${selectedSemesterFilter === 'N/A' ? 'N/A' : `Semester ${selectedSemesterFilter}`}.`
+                            : `No tasks assigned by you found for user ${selectedUsnFilter} in ${selectedSemesterFilter === 'N/A' ? 'N/A' : `Semester ${selectedSemesterFilter}`}.`
+                          )
+                      }
                    </p>
               </div>
             )}
@@ -529,7 +564,8 @@ export default function DashboardPage() {
       )}
 
 
-      {user.role === 'admin' && (
+       {/* Create Task Dialog (Only for Regular Admins) */}
+      {user.role === 'admin' && !isMasterAdmin && (
         <CreateTaskDialog
           isOpen={isCreateTaskOpen}
           onClose={() => { if (!isCreatingTask) setIsCreateTaskOpen(false); }}
