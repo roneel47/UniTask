@@ -7,7 +7,7 @@ import { KanbanBoard } from '@/components/kanban/kanban-board';
 import { Task, TaskStatus } from '@/types/task';
 import { User } from '@/types/user'; // Import User type
 import { Button } from '@/components/ui/button';
-import { Plus, Loader2, Filter, BookCopy, Columns, ListTodo, Play, Check, CheckCheck, Inbox } from 'lucide-react'; // Added task status icons
+import { Plus, Loader2, Filter, BookCopy, Columns, ListTodo, Play, Check, CheckCheck, Inbox, RefreshCw } from 'lucide-react'; // Added task status icons & RefreshCw
 import { CreateTaskDialog } from '@/components/kanban/create-task-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
@@ -36,6 +36,7 @@ export default function DashboardPage() {
     updateTask,
     addMultipleTasks,
     getAllUsers,
+    fetchTasks, // Get fetchTasks from context
     isMasterAdmin, // Get master admin status
   } = useAuth();
 
@@ -50,6 +51,7 @@ export default function DashboardPage() {
   const [studentList, setStudentList] = useState<User[]>([]); // All users fetched initially
   const [filteredStudentList, setFilteredStudentList] = useState<User[]>([]); // Students/Admins filtered by selected semester
   const [isFetchingUsers, setIsFetchingUsers] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false); // State for refresh button loading
 
 
    // Fetch all users for admin dropdowns
@@ -59,7 +61,7 @@ export default function DashboardPage() {
        if (user?.role === 'admin') {
          setIsFetchingUsers(true);
          try {
-           const allUsers = await getAllUsers();
+           const allUsers = await getAllUsers(); // Fetches latest user list
             // Ensure USNs are uppercase and semester is handled
            const processedUsers = allUsers.map(u => ({
              ...u,
@@ -80,7 +82,9 @@ export default function DashboardPage() {
        }
      };
      fetchUsers();
-   }, [user, getAllUsers, toast]);
+     // Don't re-run fetchUsers if getAllUsers changes identity, only if user changes
+     // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [user, toast]); // Removed getAllUsers dependency
 
    // Update filtered student list when semester filter changes
    useEffect(() => {
@@ -159,7 +163,7 @@ export default function DashboardPage() {
          const assignmentTarget = usnInput.trim();
          console.log(`Assignment Target: '${assignmentTarget}', Semester Target: ${semesterTarget}`);
 
-         // --- FIX: Fetch ALL users *within* the function ---
+         // --- Fetch ALL users *within* the function to get the latest list ---
          const allCurrentUsers = await getAllUsers();
          const uppercaseUserList = allCurrentUsers.map(u => ({
              ...u,
@@ -167,7 +171,7 @@ export default function DashboardPage() {
              semester: u.semester,
          }));
          console.log("Fetched users inside handleCreateTask:", uppercaseUserList.length);
-         // --- End of FIX ---
+         // ---
 
          const usersInSemester = uppercaseUserList.filter(
              (u) => (u.role === 'student' || u.role === 'admin') && u.semester === semesterTarget
@@ -316,6 +320,61 @@ export default function DashboardPage() {
      return counts;
    }, [filteredTasks]);
 
+   // Handler for Refresh button
+   const handleRefreshTasks = async () => {
+      if (!user || user.role !== 'admin') return; // Only admins can refresh
+      setIsRefreshing(true);
+      try {
+         // Fetch latest users first (in case new ones were registered)
+          await fetchUsersForDropdown(); // Call the refactored user fetching logic
+          // Fetch latest tasks from storage
+         await fetchTasks();
+         toast({
+            title: "Tasks Refreshed",
+            description: "Latest tasks and user data loaded.",
+         });
+      } catch (error: any) {
+         console.error("Failed to refresh tasks:", error);
+         toast({
+            variant: "destructive",
+            title: "Refresh Failed",
+            description: error.message || "Could not refresh tasks.",
+         });
+      } finally {
+         setIsRefreshing(false);
+      }
+   };
+
+    // Refactored user fetching logic for dropdowns
+    const fetchUsersForDropdown = async () => {
+       if (user?.role === 'admin') {
+          setIsFetchingUsers(true);
+          try {
+             const allUsers = await getAllUsers(); // Fetches latest user list
+             const processedUsers = allUsers.map(u => ({
+                ...u,
+                usn: u.usn.toUpperCase(),
+                semester: u.semester,
+             }));
+             setStudentList(processedUsers);
+          } catch (error) {
+             console.error("Failed to fetch users:", error);
+             toast({
+                variant: "destructive",
+                title: "Error",
+                description: "Could not load user list.",
+             });
+          } finally {
+             setIsFetchingUsers(false);
+          }
+       }
+    };
+
+    // Initial fetch for users on component mount
+    useEffect(() => {
+       fetchUsersForDropdown();
+       // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user, toast]); // Dependencies: user (to trigger on role change), toast (stable)
 
 
   return (
@@ -328,7 +387,7 @@ export default function DashboardPage() {
             : `Student Dashboard (${user.usn} - Sem ${user.semester === null ? 'N/A' : user.semester})`
            }
         </h1>
-        {/* Admin Controls: Create Task and Filters */}
+        {/* Admin Controls: Create Task, Filters, and Refresh */}
         {user.role === 'admin' && (
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 flex-wrap">
             {/* Semester Filter */}
@@ -340,7 +399,7 @@ export default function DashboardPage() {
                <Select
                  value={selectedSemesterFilter ?? ''}
                   onValueChange={(value) => setSelectedSemesterFilter(value === '' ? null : value)}
-                 disabled={isFetchingUsers || tasksLoading}
+                 disabled={isFetchingUsers || tasksLoading || isRefreshing} // Disable during refresh
                >
                  <SelectTrigger id="semester-filter" className="w-full sm:w-[150px]">
                    <SelectValue placeholder={isFetchingUsers ? "Loading..." : "Select Sem"} />
@@ -367,7 +426,7 @@ export default function DashboardPage() {
                      value={selectedUsnFilter ?? ''}
                       // Ensure value passed to onValueChange is uppercase or 'all'
                      onValueChange={(value) => setSelectedUsnFilter(value === '' ? null : (value === 'all' ? 'all' : value.toUpperCase()))}
-                     disabled={isFetchingUsers || tasksLoading || !selectedSemesterFilter}
+                     disabled={isFetchingUsers || tasksLoading || !selectedSemesterFilter || isRefreshing} // Disable during refresh
                    >
                      <SelectTrigger id="user-filter" className="w-full sm:w-[200px]">
                        <SelectValue placeholder={isFetchingUsers ? "Loading..." : "Select user..."} />
@@ -395,12 +454,16 @@ export default function DashboardPage() {
 
              {/* Create Task Button (Not for Master Admin viewing others) */}
              {!isMasterAdmin && (
-                 <Button onClick={() => setIsCreateTaskOpen(true)} className="bg-accent text-accent-foreground hover:bg-accent/90 w-full sm:w-auto ml-auto" disabled={isCreatingTask}>
+                 <Button onClick={() => setIsCreateTaskOpen(true)} className="bg-accent text-accent-foreground hover:bg-accent/90 w-full sm:w-auto ml-auto" disabled={isCreatingTask || isRefreshing}>
                    {isCreatingTask ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
                    Create Task
                  </Button>
              )}
-             {/* Removed Refresh Button */}
+              {/* Refresh Tasks Button (for Admins) */}
+              <Button onClick={handleRefreshTasks} variant="outline" className="w-full sm:w-auto" disabled={isRefreshing || tasksLoading}>
+                 {isRefreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                 Refresh Tasks
+              </Button>
           </div>
         )}
       </div>
@@ -577,3 +640,6 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+
+    

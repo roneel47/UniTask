@@ -29,6 +29,7 @@ interface AuthContextType {
   addTask: (newTask: Task) => Promise<void>; // Function to add a task
   addMultipleTasks: (newTasks: Task[]) => Promise<void>; // Function to add multiple tasks
   deleteTask: (taskId: string) => Promise<void>; // Function to delete a task (admin only)
+  fetchTasks: () => Promise<void>; // Add explicit fetchTasks function
   isMasterAdmin: boolean; // Added master admin check
 }
 
@@ -293,57 +294,53 @@ export function AuthProvider({ children }: AuthProviderProps) {
 };
 
 
-   const register = async (usnInput: string, semester: number | null, passwordInput?: string): Promise<void> => {
-       const usn = usnInput.toUpperCase(); // Ensure USN is uppercase
-       setLoading(true);
-       await new Promise(resolve => setTimeout(resolve, 500));
+    const register = async (usnInput: string, semester: number | null, passwordInput?: string): Promise<void> => {
+        const usn = usnInput.toUpperCase(); // Ensure USN is uppercase
+        setLoading(true);
+        await new Promise(resolve => setTimeout(resolve, 500));
 
-       const existingUser = mockUsers.find(u => u.usn === usn); // Compare with uppercase USNs
-       if (existingUser) {
-           setLoading(false);
-           throw new Error("USN already registered.");
-       }
+        // --- Load the *latest* user list from storage within the function ---
+        const storedUsersString = localStorage.getItem('uniTaskMockUsers');
+        const currentMockUsers = deserializeUsers(storedUsersString || '[]'); // Use deserialize to ensure correct format
+        // ---
 
-       if (!passwordInput || passwordInput.length < 6) {
-           setLoading(false);
-           throw new Error("Password must be at least 6 characters long.");
-       }
+        const existingUser = currentMockUsers.find(u => u.usn === usn); // Compare with uppercase USNs from latest list
+        if (existingUser) {
+            setLoading(false);
+            throw new Error("USN already registered.");
+        }
 
-       // Allow null semester, but validate numbers are between 1 and 8
-       if (semester !== null && (semester < 1 || semester > 8)) {
-           setLoading(false);
-           throw new Error("Invalid semester. Must be between 1 and 8, or null.");
-       }
+        if (!passwordInput || passwordInput.length < 6) {
+            setLoading(false);
+            throw new Error("Password must be at least 6 characters long.");
+        }
+
+        // Allow null semester, but validate numbers are between 1 and 8
+        if (semester !== null && (semester < 1 || semester > 8)) {
+            setLoading(false);
+            throw new Error("Invalid semester. Must be between 1 and 8, or null.");
+        }
 
 
-       const newUser: User = {
-           usn: usn, // Already uppercase
-           role: 'student',
-           semester: semester, // Assign semester (can be null)
-           password: hashPassword(passwordInput), // Store HASHED password
-       };
+        const newUser: User = {
+            usn: usn, // Already uppercase
+            role: 'student',
+            semester: semester, // Assign semester (can be null)
+            password: hashPassword(passwordInput), // Store HASHED password
+        };
 
-       const updatedUsers = [...mockUsers, newUser];
-       saveMockUsers(updatedUsers); // Saves to state and localStorage (WITH hashed pw), handles uppercase & semester
+        const updatedUsers = [...currentMockUsers, newUser];
+        saveMockUsers(updatedUsers); // Saves to state and localStorage (WITH hashed pw), handles uppercase & semester
 
-       // --- Retroactively assign existing 'all' tasks for the new user's semester ---
-       const newTasksForUser: Task[] = [];
-       // Find tasks that were assigned to 'all' for the new user's semester
-        const semesterWideTasks = tasks.filter(task =>
-           task.semester === newUser.semester &&
-           // Check if the original assignment intention was for 'all' - How do we know?
-           // Option 1: Add a flag like 'assignedToAllInSemester' to the Task type.
-           // Option 2: Heuristic: If a task exists for this semester but NOT specifically for this new USN, assume it might be semester-wide.
-           // Let's use a simplified heuristic for now:
-           // Find a task for the *same semester* but assigned to a *different user* or check if a 'template' task exists.
-           // For simplicity, we'll just duplicate tasks for this semester assigned by *any* admin.
-           // A more robust solution needs better tracking of 'all' assignments.
-            true // Placeholder: Needs a reliable way to identify semester-wide tasks
-       );
+        // --- Load the *latest* task list from storage within the function ---
+        const storedTasksString = localStorage.getItem('uniTaskTasks');
+        const currentTasks = deserializeTasks(storedTasksString || '[]'); // Use deserialize
+        // ---
 
+        // --- Retroactively assign existing 'all' tasks for the new user's semester ---
+        const newTasksForUser: Task[] = [];
         // Find existing "template" tasks for the semester (assigned to 'all' concept)
-        // This is tricky without a dedicated field. We'll simulate by finding tasks for the semester.
-        const tasksForSemester = tasks.filter(t => t.semester === newUser.semester);
+        const tasksForSemester = currentTasks.filter(t => t.semester === newUser.semester);
         const uniqueTaskAssignments = new Map<string, Task>();
 
         tasksForSemester.forEach(task => {
@@ -357,7 +354,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
         uniqueTaskAssignments.forEach(templateTask => {
              // Check if this user already has this specific task (e.g., if registration somehow retried)
-             const userAlreadyHasTask = tasks.some(t =>
+             const userAlreadyHasTask = currentTasks.some(t =>
                  t.usn === newUser.usn &&
                  t.title === templateTask.title &&
                  t.description === templateTask.description &&
@@ -382,13 +379,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
        if (newTasksForUser.length > 0) {
            console.log(`Retroactively assigning ${newTasksForUser.length} tasks to new user ${newUser.usn}`);
-           const updatedTasks = [...tasks, ...newTasksForUser];
+           const updatedTasks = [...currentTasks, ...newTasksForUser];
            saveTasks(updatedTasks); // Save updated tasks list
        }
        // --- End of retroactive assignment ---
 
        setLoading(false);
-   };
+    };
 
 
   const updateUserRole = async (usnInput: string, role: 'student' | 'admin'): Promise<void> => {
@@ -478,8 +475,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
         throw new Error("Permission denied. Only administrators can view user list.");
     }
      await new Promise(resolve => setTimeout(resolve, 300));
-     // Return users without passwords from the runtime state (already processed)
-     return mockUsers.map(({ password, ...userWithoutPassword }) => userWithoutPassword);
+     // --- Fetch latest from storage ---
+     const storedUsersString = localStorage.getItem('uniTaskMockUsers');
+     const currentMockUsers = deserializeUsers(storedUsersString || '[]');
+     // ---
+     // Return users without passwords from the latest list
+     return currentMockUsers.map(({ password, ...userWithoutPassword }) => userWithoutPassword);
   }
 
    const promoteSpecificSemester = async (semesterToPromote: number): Promise<{ promotedCount: number; maxSemesterCount: number }> => {
@@ -568,6 +569,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
 
    // --- Task Management Functions ---
+
+   // Explicit function to re-fetch tasks from storage
+   const fetchTasks = useCallback(async () => {
+      setTasksLoading(true);
+      await new Promise(resolve => setTimeout(resolve, 100)); // Short delay simulation
+      try {
+         const storedTasks = localStorage.getItem('uniTaskTasks');
+         const loadedTasks = deserializeTasks(storedTasks); // Deserializes dates, USNs, semester, assignedByName
+         setTasks(loadedTasks); // Update the state
+      } catch (error) {
+         console.error("Failed to re-fetch tasks from storage:", error);
+         // Optionally set an error state or show a toast
+      } finally {
+         setTasksLoading(false);
+      }
+   }, []); // Dependency array is empty as it only reads from storage
+
 
    const updateTask = async (taskId: string, updates: Partial<Task>): Promise<void> => {
     setTasksLoading(true);
@@ -743,9 +761,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
     addTask,
     addMultipleTasks,
     deleteTask,
+    fetchTasks, // Expose fetchTasks
     isMasterAdmin, // Expose master admin check
    };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
+
+
+    

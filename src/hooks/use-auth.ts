@@ -31,6 +31,7 @@ export const useAuth = () => {
     addTask,
     addMultipleTasks,
     deleteTask,
+    fetchTasks, // Include fetchTasks
   } = context;
 
   // Add a helper to check if the current user is the master admin
@@ -53,6 +54,10 @@ export const useAuth = () => {
     addTask,
     addMultipleTasks,
     deleteTask,
+    fetchTasks, // Return fetchTasks
     isMasterAdmin, // Return master admin status
   };
 };
+
+
+    
