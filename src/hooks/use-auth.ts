@@ -4,6 +4,9 @@
 import { useContext } from 'react';
 import { AuthContext } from '@/components/auth/auth-provider';
 
+// Define the master admin USN (must be uppercase) - duplicated here for easy access if needed, though ideally defined centrally
+const MASTER_ADMIN_USN = 'RONEEL1244';
+
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
@@ -18,7 +21,9 @@ export const useAuth = () => {
     register, // Now expects (usn, semester, password)
     updateUserRole,
     getAllUsers,
-    promoteSemesters, // Include promoteSemesters
+    // promoteSemesters, // Removed global promote
+    promoteSpecificSemester, // Include specific promote
+    deleteUser, // Include deleteUser
     tasks,
     tasksLoading,
     updateTask,
@@ -26,6 +31,9 @@ export const useAuth = () => {
     addMultipleTasks,
     deleteTask,
   } = context;
+
+  // Add a helper to check if the current user is the master admin
+  const isMasterAdmin = user?.usn === MASTER_ADMIN_USN;
 
   return {
     user,
@@ -35,12 +43,14 @@ export const useAuth = () => {
     register,
     updateUserRole,
     getAllUsers,
-    promoteSemesters, // Return promoteSemesters
+    promoteSpecificSemester, // Return specific promote
+    deleteUser, // Return deleteUser
     tasks,
     tasksLoading,
     updateTask,
     addTask,
     addMultipleTasks,
     deleteTask,
+    isMasterAdmin, // Return master admin status
   };
 };

@@ -5,6 +5,9 @@ import React, { createContext, useState, useEffect, ReactNode, useCallback } fro
 import { User } from '@/types/user';
 import { Task, TaskStatus } from '@/types/task'; // Import Task types
 
+// Define the master admin USN (must be uppercase)
+const MASTER_ADMIN_USN = 'RONEEL1244';
+
 // Define the shape of the authentication context
 interface AuthContextType {
   user: User | null;
@@ -16,7 +19,9 @@ interface AuthContextType {
   register: (usn: string, semester: number, password?: string) => Promise<void>; // Added semester
   updateUserRole: (usn: string, role: 'student' | 'admin') => Promise<void>;
   getAllUsers: () => Promise<User[]>;
-  promoteSemesters: () => Promise<{ promotedCount: number; maxSemesterCount: number }>; // Function to promote semesters
+  // promoteSemesters: () => Promise<{ promotedCount: number; maxSemesterCount: number }>; // Removed global promote
+  promoteSpecificSemester: (semesterToPromote: number) => Promise<{ promotedCount: number; maxSemesterCount: number }>; // Added specific promote
+  deleteUser: (usnToDelete: string) => Promise<void>; // Added delete user
   updateTask: (taskId: string, updates: Partial<Task>) => Promise<void>; // Function to update a task
   addTask: (newTask: Task) => Promise<void>; // Function to add a task
   addMultipleTasks: (newTasks: Task[]) => Promise<void>; // Function to add multiple tasks
@@ -33,14 +38,12 @@ interface AuthProviderProps {
 // Initial Mock Data (only used if localStorage is empty)
 // Only one admin initially
 const initialMockUsers: User[] = [
-  { usn: 'RONEEL1244', role: 'admin', semester: 0, password: 'pass@000' }, // Single admin
+  // Ensure the master admin USN is uppercase here
+  { usn: MASTER_ADMIN_USN, role: 'admin', semester: 0, password: 'pass@000' }, // Single admin
 ];
 
 // Initial Mock Tasks (kept for demonstration, adjust as needed if no students exist initially)
-const initialMockTasks: Task[] = [
- // Example task - won't be assigned if no students exist initially
- // { id: 'example-task-1', title: 'Example Task', description: 'This is a sample task.', dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), status: TaskStatus.ToBeStarted, assignedBy: 'RONEEL1244', usn: 'UNKNOWN', semester: 1 },
-];
+const initialMockTasks: Task[] = [];
 
 
 export function AuthProvider({ children }: AuthProviderProps) {
@@ -74,6 +77,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
             completedAt: task.completedAt ? new Date(task.completedAt) : undefined,
              // Ensure semester is a number, default to 0 or handle appropriately if missing
             semester: typeof task.semester === 'number' ? task.semester : 0,
+             // Ensure USNs in tasks are uppercase
+            usn: task.usn?.toUpperCase() ?? '',
+            assignedBy: task.assignedBy?.toUpperCase() ?? '',
         }));
         } catch (error) {
         console.error("Failed to parse tasks from storage:", error);
@@ -192,7 +198,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // Helper function to save tasks to localStorage
   const saveTasks = useCallback((updatedTasks: Task[]) => {
      // Ensure USN in tasks is uppercase before saving
-    const uppercaseTasks = updatedTasks.map(t => ({...t, usn: t.usn.toUpperCase()}));
+    const uppercaseTasks = updatedTasks.map(t => ({...t, usn: t.usn.toUpperCase(), assignedBy: t.assignedBy.toUpperCase() }));
     setTasks(uppercaseTasks);
     localStorage.setItem('uniTaskTasks', serializeTasks(uppercaseTasks));
   }, []);
@@ -301,32 +307,38 @@ export function AuthProvider({ children }: AuthProviderProps) {
      return mockUsers.map(({ password, ...userWithoutPassword }) => userWithoutPassword);
   }
 
-  const promoteSemesters = async (): Promise<{ promotedCount: number; maxSemesterCount: number }> => {
+   const promoteSpecificSemester = async (semesterToPromote: number): Promise<{ promotedCount: number; maxSemesterCount: number }> => {
     if (user?.role !== 'admin') {
       throw new Error("Permission denied. Only administrators can promote semesters.");
     }
+    if (semesterToPromote < 1 || semesterToPromote > 7) {
+        throw new Error("Invalid semester selected for promotion. Only semesters 1 through 7 can be promoted.");
+    }
 
-    setLoading(true);
+    setLoading(true); // Consider a specific loading state for promotion if needed
     await new Promise(resolve => setTimeout(resolve, 500)); // Simulate delay
 
     let promotedCount = 0;
-    let maxSemesterCount = 0;
+    let maxSemesterCount = 0; // Tracks how many were *already* in semester 8 (or the target sem + 1)
 
     const updatedUsers = mockUsers.map(u => {
-      if (u.role === 'student' && u.semester < 8) {
-        promotedCount++;
-        return { ...u, semester: u.semester + 1 };
-      } else if (u.role === 'student' && u.semester === 8) {
-        maxSemesterCount++;
-        return u; // Keep semester 8 students as they are
+      // Only promote students in the SPECIFIC semester being targeted
+      if (u.role === 'student' && u.semester === semesterToPromote) {
+         // Always increment if the target semester is < 8
+          promotedCount++;
+          return { ...u, semester: u.semester + 1 };
       }
-      return u; // Keep admins and others unchanged
+      // Count students already in the next semester or max semester (8)
+      if (u.role === 'student' && (u.semester === semesterToPromote + 1 || u.semester === 8)) {
+         maxSemesterCount++;
+      }
+      return u; // Keep other users unchanged
     });
 
     saveMockUsers(updatedUsers); // Save the updated user list (handles uppercase)
 
-     // If the current logged-in user is a student who got promoted, update their session
-    if (user && user.role === 'student' && user.semester < 8) {
+     // If the current logged-in user is a student *in the promoted semester*, update their session
+    if (user && user.role === 'student' && user.semester === semesterToPromote) {
         const updatedLoggedInUser = updatedUsers.find(u => u.usn === user.usn); // Find using uppercase USN
         if (updatedLoggedInUser) {
             const { password: _, ...userToStore } = updatedLoggedInUser;
@@ -335,9 +347,40 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
     }
 
-
-    setLoading(false);
+    setLoading(false); // Reset general loading or specific promotion loading state
     return { promotedCount, maxSemesterCount };
+  };
+
+  const deleteUser = async (usnToDeleteInput: string): Promise<void> => {
+      const usnToDelete = usnToDeleteInput.toUpperCase();
+      // Only the MASTER admin can delete users
+      if (user?.usn !== MASTER_ADMIN_USN) {
+          throw new Error("Permission denied. Only the master administrator can delete users.");
+      }
+      // Prevent master admin from deleting themselves
+      if (usnToDelete === MASTER_ADMIN_USN) {
+          throw new Error("The master administrator account cannot be deleted.");
+      }
+
+      setLoading(true); // Or a specific deleting state
+      await new Promise(resolve => setTimeout(resolve, 500)); // Simulate delay
+
+      const userIndex = mockUsers.findIndex(u => u.usn === usnToDelete);
+
+      if (userIndex === -1) {
+          setLoading(false);
+          throw new Error("User not found.");
+      }
+
+      const updatedUsers = mockUsers.filter(u => u.usn !== usnToDelete);
+      saveMockUsers(updatedUsers);
+
+       // Also delete tasks associated with the user
+       const updatedTasks = tasks.filter(task => task.usn !== usnToDelete);
+       saveTasks(updatedTasks);
+
+
+      setLoading(false); // Reset loading state
   };
 
 
@@ -366,11 +409,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const currentSemester = updatedTasks[taskIndex].semester;
     // Ensure updated USN is uppercase if provided
     const updatedUsn = updates.usn ? updates.usn.toUpperCase() : updatedTasks[taskIndex].usn;
+    // Ensure assignedBy is uppercase if provided
+    const updatedAssignedBy = updates.assignedBy ? updates.assignedBy.toUpperCase() : updatedTasks[taskIndex].assignedBy;
+
 
     updatedTasks[taskIndex] = {
         ...updatedTasks[taskIndex],
         ...updates,
         usn: updatedUsn, // Ensure USN is uppercase
+        assignedBy: updatedAssignedBy, // Ensure assignedBy is uppercase
         semester: updates.semester ?? currentSemester, // Preserve semester if not explicitly updated
     };
 
@@ -407,8 +454,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setTasksLoading(true);
       await new Promise(resolve => setTimeout(resolve, 200)); // Simulate creation delay
 
-       // Ensure new task USN is uppercase
-      const taskToAdd = {...newTask, usn: newTask.usn.toUpperCase()};
+       // Ensure new task USN and assignedBy are uppercase
+      const taskToAdd = {...newTask, usn: newTask.usn.toUpperCase(), assignedBy: newTask.assignedBy.toUpperCase()};
 
       // Basic validation: check if ID already exists
       if (tasks.some(task => task.id === taskToAdd.id)) {
@@ -429,13 +476,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
       if (newTasks.length === 0) return;
 
-       // Ensure all new tasks have uppercase USNs and valid semesters
+       // Ensure all new tasks have uppercase USNs and assignedBy, and valid semesters
        const tasksToAdd: Task[] = [];
        for (const task of newTasks) {
            if (typeof task.semester !== 'number' || task.semester < 1 || task.semester > 8) {
                throw new Error(`Invalid or missing semester for task "${task.title}".`);
            }
-           tasksToAdd.push({...task, usn: task.usn.toUpperCase()});
+           tasksToAdd.push({...task, usn: task.usn.toUpperCase(), assignedBy: task.assignedBy.toUpperCase()});
        }
 
 
@@ -487,7 +534,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     register,
     updateUserRole,
     getAllUsers,
-    promoteSemesters, // Expose the new function
+    // promoteSemesters, // Removed global promote
+    promoteSpecificSemester, // Expose specific promote
+    deleteUser, // Expose delete user
     updateTask,
     addTask,
     addMultipleTasks,

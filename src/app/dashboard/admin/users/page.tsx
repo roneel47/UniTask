@@ -11,7 +11,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
-import { AlertCircle, Loader2, Filter, BookCopy, ArrowUpCircle } from 'lucide-react'; // Added Filter, BookCopy, ArrowUpCircle
+import { AlertCircle, Loader2, Filter, BookCopy, ArrowUpCircle, Trash2, UserX } from 'lucide-react'; // Added Trash2, UserX
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Select,
@@ -31,21 +31,39 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"; // Added AlertDialog
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'; // Added Tooltip
 
-// Define semester options
-const semesterOptions = ['all', ...Array.from({ length: 8 }, (_, i) => String(i + 1))];
+
+// Define semester options for filtering and promotion (add 'all' for filter)
+const filterSemesterOptions = ['all', ...Array.from({ length: 8 }, (_, i) => String(i + 1))];
+// Semesters eligible for promotion (1-7)
+const promotableSemesterOptions = Array.from({ length: 7 }, (_, i) => String(i + 1));
+
+// Define the master admin USN (must be uppercase) - used for UI checks
+const MASTER_ADMIN_USN = 'RONEEL1244';
 
 export default function ManageUsersPage() {
-  const { user, loading, getAllUsers, updateUserRole, promoteSemesters } = useAuth(); // Added promoteSemesters
+  const {
+    user,
+    loading,
+    getAllUsers,
+    updateUserRole,
+    // promoteSemesters, // Removed global promote
+    promoteSpecificSemester, // Added specific promote
+    deleteUser, // Added delete user
+    isMasterAdmin, // Added check for master admin
+   } = useAuth();
   const router = useRouter();
   const [allUsers, setAllUsers] = useState<User[]>([]); // Store all fetched users
   const [filteredUsers, setFilteredUsers] = useState<User[]>([]); // Users to display in the table
   const [isDataLoading, setIsDataLoading] = useState(true);
-  const [updatingUsers, setUpdatingUsers] = useState<Record<string, boolean>>({}); // Track loading state per user
+  const [updatingUsers, setUpdatingUsers] = useState<Record<string, boolean>>({}); // Track loading state per user role update
+  const [deletingUser, setDeletingUser] = useState<string | null>(null); // Track which user is being deleted
   const [isPromoting, setIsPromoting] = useState(false); // State for promotion loading
   const { toast } = useToast();
   const [error, setError] = useState<string | null>(null);
   const [selectedSemesterFilter, setSelectedSemesterFilter] = useState<string>('all'); // Default to 'all'
+  const [semesterToPromote, setSemesterToPromote] = useState<string | null>(null); // Track semester selected for promotion
 
 
   useEffect(() => {
@@ -59,7 +77,7 @@ export default function ManageUsersPage() {
       fetchUsers();
     }
      // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]); // Re-fetch if user changes (though unlikely in this context)
+  }, [user]); // Re-fetch if user changes
 
 
    // Filter users whenever allUsers or the semester filter changes
@@ -82,7 +100,6 @@ export default function ManageUsersPage() {
         // USNs are already uppercase from context
         userList.sort((a, b) => (a.semester - b.semester) || a.usn.localeCompare(b.usn));
         setAllUsers(userList); // Store all users (USNs are uppercase)
-        // setFilteredUsers(userList); // Initial display (will be updated by useEffect)
       } catch (err: any) {
          console.error("Failed to fetch users:", err);
          setError(err.message || "Failed to load user data.");
@@ -143,24 +160,57 @@ export default function ManageUsersPage() {
     }
   };
 
-  const handlePromoteSemesters = async () => {
+  const handlePromoteSemester = async () => {
+    if (!semesterToPromote) {
+        toast({
+            variant: "destructive",
+            title: "Selection Error",
+            description: "Please select a semester (1-7) to promote.",
+        });
+        return;
+    }
+
+    const semesterNumber = parseInt(semesterToPromote, 10);
     setIsPromoting(true);
     try {
-      const { promotedCount, maxSemesterCount } = await promoteSemesters();
+      const { promotedCount, maxSemesterCount } = await promoteSpecificSemester(semesterNumber);
       await fetchUsers(); // Re-fetch users to reflect changes
       toast({
-        title: "Semesters Promoted",
-        description: `${promotedCount} student(s) moved to the next semester. ${maxSemesterCount} student(s) remained in Semester 8.`,
+        title: `Semester ${semesterNumber} Promoted`,
+        description: `${promotedCount} student(s) moved to Semester ${semesterNumber + 1}. ${maxSemesterCount} student(s) are in Semester ${semesterNumber + 1} or higher.`,
       });
+       setSemesterToPromote(null); // Reset dropdown after successful promotion
     } catch (err: any) {
-      console.error("Failed to promote semesters:", err);
+      console.error(`Failed to promote semester ${semesterNumber}:`, err);
       toast({
         variant: "destructive",
         title: "Promotion Failed",
-        description: err.message || "Could not promote semesters.",
+        description: err.message || `Could not promote semester ${semesterNumber}.`,
       });
     } finally {
       setIsPromoting(false);
+    }
+  };
+
+   const handleDeleteUser = async (usnToDelete: string) => {
+    setDeletingUser(usnToDelete); // Set loading state for this specific user
+    try {
+      await deleteUser(usnToDelete); // Context handles uppercase
+      toast({
+        title: "User Deleted",
+        description: `User ${usnToDelete} and their associated tasks have been removed.`,
+      });
+      // Re-fetch users to update the list
+      await fetchUsers();
+    } catch (err: any) {
+      console.error(`Failed to delete user ${usnToDelete}:`, err);
+      toast({
+        variant: "destructive",
+        title: "Deletion Failed",
+        description: err.message || `Could not delete user ${usnToDelete}.`,
+      });
+    } finally {
+      setDeletingUser(null); // Clear loading state
     }
   };
 
@@ -170,14 +220,17 @@ export default function ManageUsersPage() {
      return (
        <div className="container mx-auto p-4 pt-8">
          <Skeleton className="h-8 w-48 mb-6 bg-muted" />
-         <div className="mb-4 flex justify-between items-center gap-2">
-            {/* Skeleton for filter */}
+         <div className="mb-4 flex flex-wrap justify-between items-center gap-4">
+             {/* Skeleton for filter */}
             <div className="flex items-center gap-2">
                 <Skeleton className="h-5 w-20 bg-muted" />
                 <Skeleton className="h-10 w-32 bg-muted" />
             </div>
-            {/* Skeleton for Promote button */}
-             <Skeleton className="h-10 w-40 bg-muted" />
+             {/* Skeleton for Promote */}
+            <div className="flex items-center gap-2">
+                <Skeleton className="h-10 w-32 bg-muted" />
+                <Skeleton className="h-10 w-40 bg-muted" />
+            </div>
          </div>
          <div className="border rounded-lg">
            <Table>
@@ -187,6 +240,8 @@ export default function ManageUsersPage() {
                     <TableHead><Skeleton className="h-5 w-16 bg-muted" /></TableHead> {/* Semester */}
                     <TableHead><Skeleton className="h-5 w-24 bg-muted" /></TableHead> {/* Role */}
                     <TableHead className="text-right"><Skeleton className="h-5 w-40 bg-muted ml-auto" /></TableHead>
+                    {/* Skeleton for Delete */}
+                    {isMasterAdmin && <TableHead className="text-right"><Skeleton className="h-5 w-20 bg-muted ml-auto" /></TableHead>}
                 </TableRow>
              </TableHeader>
              <TableBody>
@@ -196,6 +251,8 @@ export default function ManageUsersPage() {
                         <TableCell><Skeleton className="h-5 w-16 bg-muted" /></TableCell>
                         <TableCell><Skeleton className="h-5 w-24 bg-muted" /></TableCell>
                         <TableCell className="text-right"><Skeleton className="h-8 w-20 bg-muted ml-auto" /></TableCell>
+                        {/* Skeleton for Delete */}
+                        {isMasterAdmin && <TableCell className="text-right"><Skeleton className="h-8 w-20 bg-muted ml-auto" /></TableCell>}
                     </TableRow>
                 ))}
              </TableBody>
@@ -220,51 +277,23 @@ export default function ManageUsersPage() {
       <div className="flex flex-col md:flex-row justify-between md:items-center mb-6 gap-4">
           <h1 className="text-2xl font-semibold text-primary">Manage Users</h1>
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 flex-wrap">
-             {/* Promote Semesters Button */}
-                <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                        <Button variant="outline" disabled={isPromoting || isDataLoading}>
-                            {isPromoting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowUpCircle className="mr-2 h-4 w-4" />}
-                            Promote Semesters
-                        </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                        <AlertDialogHeader>
-                        <AlertDialogTitle>Promote All Student Semesters?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This will increment the semester for all students currently in semesters 1 through 7. Students in semester 8 will remain in semester 8. This action cannot be easily undone. Are you sure?
-                        </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                        <AlertDialogCancel disabled={isPromoting}>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={handlePromoteSemesters}
-                            disabled={isPromoting}
-                            className="bg-primary text-primary-foreground hover:bg-primary/90"
-                        >
-                            {isPromoting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                            Yes, Promote Semesters
-                        </AlertDialogAction>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialog>
 
-              {/* Semester Filter */}
+               {/* Semester Filter */}
                <div className="flex items-center gap-2">
                    <Label htmlFor="semester-filter" className="text-sm font-medium shrink-0">
                      <Filter className="inline-block h-4 w-4 mr-1 relative -top-px"/>
-                     Filter by Semester:
+                     Filter:
                    </Label>
                    <Select
                      value={selectedSemesterFilter}
                      onValueChange={setSelectedSemesterFilter}
-                     disabled={isDataLoading || isPromoting}
+                     disabled={isDataLoading || isPromoting || !!deletingUser}
                    >
                      <SelectTrigger id="semester-filter" className="w-full sm:w-[180px]">
                        <SelectValue placeholder="Select Semester" />
                      </SelectTrigger>
                      <SelectContent>
-                       {semesterOptions.map(sem => (
+                       {filterSemesterOptions.map(sem => (
                          <SelectItem key={sem} value={sem}>
                            {sem === 'all' ? 'All Semesters' : `Semester ${sem}`}
                          </SelectItem>
@@ -272,6 +301,57 @@ export default function ManageUsersPage() {
                      </SelectContent>
                    </Select>
                </div>
+
+                {/* Promote Specific Semester */}
+                <div className="flex items-center gap-2">
+                     <Select
+                        value={semesterToPromote ?? ''}
+                        onValueChange={(value) => setSemesterToPromote(value === '' ? null : value)}
+                        disabled={isDataLoading || isPromoting || !!deletingUser}
+                    >
+                        <SelectTrigger id="promote-semester-select" className="w-full sm:w-[150px]">
+                            <SelectValue placeholder="Promote Sem..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {promotableSemesterOptions.map(sem => (
+                                <SelectItem key={sem} value={sem}>
+                                Sem {sem}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                            <Button
+                                variant="outline"
+                                disabled={isPromoting || isDataLoading || !semesterToPromote || !!deletingUser}
+                                className="w-full sm:w-auto"
+                            >
+                                {isPromoting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowUpCircle className="mr-2 h-4 w-4" />}
+                                Promote
+                            </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                            <AlertDialogTitle>Promote Semester {semesterToPromote}?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                This will increment the semester ONLY for students currently in semester {semesterToPromote}. Students in semester 8 will remain in semester 8. This action cannot be easily undone. Are you sure?
+                            </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                            <AlertDialogCancel disabled={isPromoting}>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={handlePromoteSemester}
+                                disabled={isPromoting}
+                                className="bg-primary text-primary-foreground hover:bg-primary/90"
+                            >
+                                {isPromoting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                Yes, Promote Sem {semesterToPromote}
+                            </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                </div>
           </div>
        </div>
 
@@ -294,6 +374,7 @@ export default function ManageUsersPage() {
                      <TableHead><Skeleton className="h-5 w-16 bg-muted" /></TableHead> {/* Semester */}
                     <TableHead><Skeleton className="h-5 w-24 bg-muted" /></TableHead> {/* Role */}
                     <TableHead className="text-right"><Skeleton className="h-5 w-40 bg-muted ml-auto" /></TableHead>
+                     {isMasterAdmin && <TableHead className="text-right"><Skeleton className="h-5 w-20 bg-muted ml-auto" /></TableHead>}
                 </TableRow>
              </TableHeader>
              <TableBody>
@@ -303,6 +384,7 @@ export default function ManageUsersPage() {
                          <TableCell><Skeleton className="h-5 w-16 bg-muted" /></TableCell>
                         <TableCell><Skeleton className="h-5 w-24 bg-muted" /></TableCell>
                         <TableCell className="text-right"><Skeleton className="h-8 w-20 bg-muted ml-auto" /></TableCell>
+                         {isMasterAdmin && <TableCell className="text-right"><Skeleton className="h-8 w-20 bg-muted ml-auto" /></TableCell>}
                     </TableRow>
                 ))}
              </TableBody>
@@ -315,14 +397,16 @@ export default function ManageUsersPage() {
               <TableRow>
                 <TableHead>USN</TableHead>
                 <TableHead><BookCopy className="inline-block h-4 w-4 mr-1 relative -top-px" /> Semester</TableHead>
-                <TableHead>Current Role</TableHead>
-                <TableHead className="text-right">Set as Admin</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead className="text-right">Set Admin</TableHead>
+                {/* Add Delete Header only for Master Admin */}
+                {isMasterAdmin && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {/* Filtered users already have uppercase USNs */}
               {filteredUsers.map((targetUser) => (
-                <TableRow key={targetUser.usn}>
+                <TableRow key={targetUser.usn} className={deletingUser === targetUser.usn ? 'opacity-50' : ''}>
                   <TableCell className="font-medium">{targetUser.usn}</TableCell>
                   <TableCell>{targetUser.semester || 'N/A'}</TableCell> {/* Display semester */}
                   <TableCell>{targetUser.role}</TableCell>
@@ -335,8 +419,8 @@ export default function ManageUsersPage() {
                             onCheckedChange={(checked) =>
                               handleRoleChange(targetUser, checked ? 'admin' : 'student')
                             }
-                            // Admin cannot change own role (compare uppercase USNs). Also disable if data is loading or this user is being updated.
-                            disabled={loading || updatingUsers[targetUser.usn] || isPromoting || user.usn === targetUser.usn}
+                            // Admin cannot change own role. Disable if data loading, user updating, promoting, or deleting.
+                            disabled={loading || !!updatingUsers[targetUser.usn] || isPromoting || user.usn === targetUser.usn || !!deletingUser}
                             aria-label={`Set ${targetUser.usn} as admin`}
                          />
                          <Label htmlFor={`admin-switch-${targetUser.usn}`} className="sr-only">
@@ -344,6 +428,69 @@ export default function ManageUsersPage() {
                          </Label>
                       </div>
                   </TableCell>
+                  {/* Add Delete Button Cell only for Master Admin */}
+                  {isMasterAdmin && (
+                    <TableCell className="text-right">
+                       {/* Don't show delete button for the master admin themselves */}
+                      {targetUser.usn !== MASTER_ADMIN_USN && (
+                        <AlertDialog>
+                          <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                   <AlertDialogTrigger asChild>
+                                      <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-8 w-8 text-destructive/80 hover:text-destructive"
+                                          disabled={isPromoting || !!deletingUser || loading || updatingUsers[targetUser.usn]} // Disable if any operation is in progress
+                                       >
+                                          {deletingUser === targetUser.usn ? <Loader2 className="h-4 w-4 animate-spin"/> : <Trash2 className="h-4 w-4" />}
+                                      </Button>
+                                   </AlertDialogTrigger>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p>Delete User</p>
+                                </TooltipContent>
+                              </Tooltip>
+                          </TooltipProvider>
+                          <AlertDialogContent>
+                              <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete User {targetUser.usn}?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                      This action cannot be undone. This will permanently delete the user account for <span className="font-semibold">{targetUser.usn}</span> and all associated tasks. Are you sure?
+                                  </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                  <AlertDialogCancel disabled={deletingUser === targetUser.usn}>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                      onClick={() => handleDeleteUser(targetUser.usn)}
+                                      disabled={deletingUser === targetUser.usn}
+                                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                  >
+                                      {deletingUser === targetUser.usn ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                      Yes, Delete User
+                                  </AlertDialogAction>
+                              </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      )}
+                       {/* Show a placeholder or icon if it's the master admin row */}
+                       {targetUser.usn === MASTER_ADMIN_USN && (
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <span className="inline-block h-8 w-8 pt-1.5 text-center text-muted-foreground">
+                                            <UserX className="h-4 w-4 inline-block"/>
+                                        </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        <p>Master admin cannot be deleted.</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                       )}
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>
