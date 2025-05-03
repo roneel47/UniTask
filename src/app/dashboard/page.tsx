@@ -1,42 +1,77 @@
+
 "use client";
 
-import React, { useState } from 'react'; // Removed useEffect as data fetching is handled by AuthProvider
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { KanbanBoard } from '@/components/kanban/kanban-board';
 import { Task, TaskStatus } from '@/types/task';
+import { User } from '@/types/user'; // Import User type
 import { Button } from '@/components/ui/button';
-import { Plus, Loader2 } from 'lucide-react';
+import { Plus, Loader2, Filter } from 'lucide-react';
 import { CreateTaskDialog } from '@/components/kanban/create-task-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from '@/components/ui/label';
 
-// Mock data removed - tasks come from useAuth context
 
 export default function DashboardPage() {
   const {
     user,
-    tasks, // Get tasks from context
-    tasksLoading, // Get loading state from context
-    updateTask, // Get update function from context
-    addMultipleTasks, // Get add function from context
-    // deleteTask, // Get delete function (if needed directly here)
-    getAllUsers, // Needed for 'all' assignment logic
+    tasks,
+    tasksLoading,
+    updateTask,
+    addMultipleTasks,
+    getAllUsers,
   } = useAuth();
 
   const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
-  const [isCreatingTask, setIsCreatingTask] = useState(false); // Loading state for task creation
-  const [assignmentError, setAssignmentError] = useState<string | null>(null); // Error state for 'all' assignment
+  const [isCreatingTask, setIsCreatingTask] = useState(false);
+  const [assignmentError, setAssignmentError] = useState<string | null>(null);
   const { toast } = useToast();
 
+  // State for student filtering (admin only)
+  const [selectedUsnFilter, setSelectedUsnFilter] = useState<string | null>(null); // Default to null (no selection)
+  const [studentList, setStudentList] = useState<User[]>([]);
+  const [isFetchingStudents, setIsFetchingStudents] = useState(false);
 
-  // Removed useEffect for fetching tasks - handled by AuthProvider
+
+   // Fetch student list for admin dropdown
+   useEffect(() => {
+     const fetchStudents = async () => {
+       if (user?.role === 'admin') {
+         setIsFetchingStudents(true);
+         try {
+           const allUsers = await getAllUsers();
+           // Filter only students for the dropdown
+           setStudentList(allUsers.filter(u => u.role === 'student'));
+         } catch (error) {
+           console.error("Failed to fetch students for filter:", error);
+           toast({
+             variant: "destructive",
+             title: "Error",
+             description: "Could not load student list for filtering.",
+           });
+         } finally {
+           setIsFetchingStudents(false);
+         }
+       }
+     };
+     fetchStudents();
+   }, [user, getAllUsers, toast]);
+
 
   const handleTaskMove = async (taskId: string, newStatus: TaskStatus) => {
     console.log(`Requesting move for task ${taskId} to ${newStatus}`);
     try {
-      // Call updateTask from context
       await updateTask(taskId, { status: newStatus });
       toast({
         title: "Task Updated",
@@ -49,7 +84,6 @@ export default function DashboardPage() {
         title: "Update Failed",
         description: error.message || "Could not move the task.",
       });
-      // No need for explicit revert, context state remains unchanged on error
     }
   };
 
@@ -65,10 +99,9 @@ export default function DashboardPage() {
 
          if (newTaskData.usn.toLowerCase() === 'all') {
              // Fetch all users to determine target USNs (assuming all non-admins are students)
-             const allUsers = await getAllUsers();
-             targetUsns = allUsers
-                .filter(u => u.role === 'student') // Only assign to students
-                .map(u => u.usn);
+             // Use the already fetched list if available, otherwise fetch again
+             const students = studentList.length > 0 ? studentList : (await getAllUsers()).filter(u => u.role === 'student');
+             targetUsns = students.map(u => u.usn);
 
              if (targetUsns.length === 0) {
                  setAssignmentError("No student users found to assign the task to.");
@@ -76,37 +109,35 @@ export default function DashboardPage() {
                  return;
              }
          } else {
-             // Assign to a specific USN - Consider validating USN existence
-              const usnUpper = newTaskData.usn.toUpperCase();
-             // Optional: Validate USN exists via getAllUsers if needed
-             // const allUsers = await getAllUsers();
-             // if (!allUsers.some(u => u.usn === usnUpper)) {
-             //    setAssignmentError(`User with USN ${usnUpper} not found.`);
-             //    setIsCreatingTask(false);
-             //    return;
-             // }
+             const usnUpper = newTaskData.usn.toUpperCase();
+             // Optional: Validate USN exists
+             const allUsers = studentList.length > 0 ? studentList : await getAllUsers();
+             if (!allUsers.some(u => u.usn === usnUpper && u.role === 'student')) {
+                setAssignmentError(`Student with USN ${usnUpper} not found.`);
+                setIsCreatingTask(false);
+                return;
+             }
              targetUsns = [usnUpper];
          }
 
-         const taskIdBase = String(Date.now()); // Base ID for the task batch
+         const taskIdBase = String(Date.now());
          const tasksToAdd: Task[] = targetUsns.map(usn => ({
-            id: `${taskIdBase}-${usn}`, // Unique ID per student assignment
+            id: `${taskIdBase}-${usn}`,
             title: newTaskData.title,
             description: newTaskData.description,
             dueDate: newTaskData.dueDate,
             status: TaskStatus.ToBeStarted,
-            assignedBy: user.usn, // Assign by the current admin user
-            usn: usn, // Specific USN for this task instance
-            // attachmentUrl: newTaskData.attachmentUrl, // Include if added
+            assignedBy: user.usn,
+            usn: usn,
          }));
 
-         await addMultipleTasks(tasksToAdd); // Use addMultipleTasks from context
+         await addMultipleTasks(tasksToAdd);
 
          toast({
             title: "Task(s) Created",
             description: `Task assigned to ${newTaskData.usn === 'all' ? targetUsns.length + ' student(s)' : newTaskData.usn}.`,
          });
-         setIsCreateTaskOpen(false); // Close dialog on success
+         setIsCreateTaskOpen(false);
 
      } catch (error: any) {
          console.error("Failed to create task(s):", error);
@@ -121,24 +152,66 @@ export default function DashboardPage() {
      }
   };
 
-  // Dashboard Layout handles initial user loading state
+  // Filter tasks based on role and selection
+  const filteredTasks = tasks.filter(task => {
+    if (!user) return false; // Should not happen due to layout guard
+    if (user.role === 'student') {
+        return task.usn.toUpperCase() === user.usn.toUpperCase();
+    }
+    // Admin filtering logic
+    if (selectedUsnFilter === 'all') {
+        return true; // Show all tasks
+    }
+    if (selectedUsnFilter) {
+        return task.usn.toUpperCase() === selectedUsnFilter.toUpperCase(); // Show tasks for selected student
+    }
+    return false; // If admin and no filter selected, show no tasks initially
+  });
 
-  // User is guaranteed by layout, access directly
-  const filteredTasks = tasks.filter(task =>
-      user.role === 'admin' || task.usn.toUpperCase() === user.usn.toUpperCase()
-  );
 
   return (
     <div className="container mx-auto p-4 pt-8">
-       <div className="flex justify-between items-center mb-6">
+       <div className="flex flex-col md:flex-row justify-between md:items-center mb-6 gap-4">
         <h1 className="text-2xl font-semibold text-primary">
           {user.role === 'admin' ? 'Admin Dashboard' : `Student Dashboard (${user.usn})`}
         </h1>
+        {/* Admin Controls: Create Task and Filter */}
         {user.role === 'admin' && (
-          <Button onClick={() => setIsCreateTaskOpen(true)} className="bg-accent text-accent-foreground hover:bg-accent/90" disabled={isCreatingTask}>
-             {isCreatingTask ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-             Create Task
-          </Button>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            {/* Student Filter */}
+            <div className="flex items-center gap-2">
+               <Label htmlFor="student-filter" className="text-sm font-medium shrink-0">
+                 <Filter className="inline-block h-4 w-4 mr-1 relative -top-px"/>
+                 Filter by Student:
+               </Label>
+               <Select
+                 value={selectedUsnFilter ?? ''}
+                 onValueChange={(value) => setSelectedUsnFilter(value === '' ? null : value)}
+                 disabled={isFetchingStudents || tasksLoading}
+               >
+                 <SelectTrigger id="student-filter" className="w-full sm:w-[200px]">
+                   <SelectValue placeholder={isFetchingStudents ? "Loading students..." : "Select a student"} />
+                 </SelectTrigger>
+                 <SelectContent>
+                   <SelectItem value="all">All Students</SelectItem>
+                   {studentList.map(student => (
+                     <SelectItem key={student.usn} value={student.usn}>
+                       {student.usn}
+                     </SelectItem>
+                   ))}
+                   {studentList.length === 0 && !isFetchingStudents && (
+                      <p className="p-2 text-sm text-muted-foreground">No students found</p>
+                   )}
+                 </SelectContent>
+               </Select>
+            </div>
+
+             {/* Create Task Button */}
+             <Button onClick={() => setIsCreateTaskOpen(true)} className="bg-accent text-accent-foreground hover:bg-accent/90 w-full sm:w-auto" disabled={isCreatingTask}>
+               {isCreatingTask ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+               Create Task
+             </Button>
+          </div>
         )}
       </div>
 
@@ -150,7 +223,7 @@ export default function DashboardPage() {
          </Alert>
        )}
 
-      {tasksLoading ? ( // Use tasksLoading from context
+      {tasksLoading ? (
          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           {[...Array(5)].map((_, i) => (
             <div key={i} className="bg-secondary p-4 rounded-lg shadow animate-pulse">
@@ -161,11 +234,35 @@ export default function DashboardPage() {
           ))}
         </div>
       ) : (
-        <KanbanBoard
-            tasks={filteredTasks} // Pass filtered tasks
-            onTaskMove={handleTaskMove}
-            isAdmin={user.role === 'admin'}
-         />
+        <>
+          {/* Message for admin if no student is selected */}
+          {user?.role === 'admin' && !selectedUsnFilter && (
+            <div className="flex flex-col items-center justify-center h-[calc(100vh-250px)] text-center">
+               <Filter className="h-12 w-12 text-muted-foreground mb-4" />
+              <p className="text-lg font-medium text-muted-foreground">Select a student</p>
+              <p className="text-sm text-muted-foreground">Choose a student from the dropdown above to view their tasks, or select "All Students".</p>
+            </div>
+          )}
+
+           {/* Show Kanban board if a filter is selected (admin) or if user is student */}
+          {(user?.role === 'student' || selectedUsnFilter) && (
+            <KanbanBoard
+                tasks={filteredTasks}
+                onTaskMove={handleTaskMove}
+                isAdmin={user.role === 'admin'}
+             />
+           )}
+
+           {/* Message if filter is selected but no tasks found */}
+           {user?.role === 'admin' && selectedUsnFilter && filteredTasks.length === 0 && (
+              <div className="flex flex-col items-center justify-center h-[calc(100vh-250px)] text-center">
+                  <p className="text-lg font-medium text-muted-foreground">No tasks found</p>
+                  <p className="text-sm text-muted-foreground">
+                     {selectedUsnFilter === 'all' ? "There are no tasks assigned yet." : `No tasks found for student ${selectedUsnFilter}.`}
+                   </p>
+              </div>
+            )}
+        </>
       )}
 
 
@@ -174,9 +271,10 @@ export default function DashboardPage() {
           isOpen={isCreateTaskOpen}
           onClose={() => { if (!isCreatingTask) setIsCreateTaskOpen(false); }}
           onCreate={handleCreateTask}
-          isLoading={isCreatingTask} // Pass loading state to dialog
+          isLoading={isCreatingTask}
         />
       )}
     </div>
   );
 }
+
