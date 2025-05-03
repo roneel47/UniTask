@@ -40,39 +40,43 @@ export function Header() {
       <div className="container flex h-14 items-center">
         <div className="mr-4 flex">
           <Link href="/" className="mr-6 flex items-center space-x-2">
-            {/* Replace with the new custom SVG icon */}
+            {/* Updated SVG icon with refined alignment */}
             <svg
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
-              strokeWidth="1.5" // Slightly adjusted stroke width for the new icon style
+              strokeWidth="1.5" // Maintain stroke width
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="h-7 w-7 text-primary" // Use primary color, increased size slightly
+              className="h-7 w-7 text-primary" // Use primary color, maintain size
             >
-              {/* Book Outline */}
+              {/* Book Outline - adjusted path slightly */}
               <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
               <path d="M6.5 2H20v15H6.5A2.5 2.5 0 0 1 4 14.5V4.5A2.5 2.5 0 0 1 6.5 2z" />
-              {/* Left Page Content */}
-              <rect x="6" y="5" width="2" height="2" rx="0.5" fill="#FFD700" stroke="none"/> {/* Yellow square */}
-              <path d="m8 9 1 1 2-2" stroke="#32CD32" strokeWidth="2"/> {/* Green check 1 */}
-              <path d="m8 12 1 1 2-2" stroke="#32CD32" strokeWidth="2"/> {/* Green check 2 */}
-              <path d="m8 15 1 1 2-2" stroke="#32CD32" strokeWidth="2"/> {/* Green check 3 */}
-              <line x1="12" y1="6" x2="10" y2="6" stroke="currentColor" />
-              <line x1="12" y1="9" x2="10" y2="9" stroke="currentColor" />
-              <line x1="12" y1="12" x2="10" y2="12" stroke="currentColor" />
-              <line x1="12" y1="15" x2="10" y2="15" stroke="currentColor" />
 
-              {/* Right Page Content */}
-              {/* Graduation Cap */}
-              <path d="M22 10v6M2 10l10-5 10 5-10 5z" stroke="currentColor"/>
-              <path d="M6 12v5c3 3 12 3 15 0v-5" stroke="currentColor"/>
-              {/* ID Card */}
-              <rect x="14" y="13" width="6" height="4" rx="1" stroke="currentColor"/>
-              <circle cx="16" cy="15" r="0.5" fill="currentColor" stroke="currentColor"/>
-              <line x1="18" y1="14.5" x2="19" y2="14.5" stroke="currentColor" />
-              <line x1="18" y1="15.5" x2="19" y2="15.5" stroke="currentColor" />
+              {/* Left Page Content - Adjusted positioning and stroke widths */}
+              {/* Yellow Square - Adjusted position slightly */}
+              <rect x="5.5" y="5" width="2" height="2" rx="0.5" fill="#FFD700" stroke="none"/>
+              {/* Green Checks - Adjusted positions and size */}
+              <path d="m7.5 9 1 1 2-2" stroke="#32CD32" strokeWidth="1.8"/>
+              <path d="m7.5 12 1 1 2-2" stroke="#32CD32" strokeWidth="1.8"/>
+              <path d="m7.5 15 1 1 2-2" stroke="#32CD32" strokeWidth="1.8"/>
+              {/* Lines - Adjusted positions and length */}
+              <line x1="11.5" y1="6" x2="10" y2="6" stroke="currentColor" />
+              <line x1="11.5" y1="9" x2="10" y2="9" stroke="currentColor" />
+              <line x1="11.5" y1="12" x2="10" y2="12" stroke="currentColor" />
+              <line x1="11.5" y1="15" x2="10" y2="15" stroke="currentColor" />
+
+              {/* Right Page Content - Adjusted positioning and elements */}
+              {/* Graduation Cap - Adjusted positioning */}
+              <path d="M22 10v6M2 10l10-5 10 5-10 5z" stroke="currentColor" transform="translate(-1, 0.5)"/>
+              <path d="M5 12v5c3 3 12 3 15 0v-5" stroke="currentColor" transform="translate(0, 0.5)"/>
+              {/* ID Card - Adjusted positioning, size, and elements */}
+              <rect x="14.5" y="13.5" width="5" height="3.5" rx="0.8" stroke="currentColor"/>
+              <circle cx="16" cy="15.2" r="0.5" fill="currentColor" stroke="currentColor"/>
+              <line x1="17.5" y1="14.8" x2="18.5" y2="14.8" stroke="currentColor" strokeWidth="1"/>
+              <line x1="17.5" y1="15.8" x2="18.5" y2="15.8" stroke="currentColor" strokeWidth="1"/>
             </svg>
             <span className="font-bold text-primary">UniTask</span>
           </Link>
@@ -113,7 +117,7 @@ export function Header() {
                       <p className="text-xs leading-none text-muted-foreground">
                          {/* Display N/A if semester is null */}
                          {user.role === 'admin'
-                            ? `Administrator${user.semester !== null ? ` - Sem ${user.semester}` : ''}`
+                            ? `${isMasterAdmin ? 'Master Admin' : 'Admin'}${user.semester !== null ? ` - Sem ${user.semester}` : ''}`
                             : `Student - Sem ${user.semester === null ? 'N/A' : user.semester}`
                          }
                       </p>
