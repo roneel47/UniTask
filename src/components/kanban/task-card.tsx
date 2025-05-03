@@ -218,7 +218,10 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
                  )}
                  {/* Fallback if assignedByName is missing (shouldn't happen ideally) */}
                  {!task.assignedByName && (
-                      <p className="text-xs mt-2">Assigned by: {task.assignedBy.toUpperCase()}</p>
+                      <p className="text-xs mt-2 flex items-center">
+                          <UserCog className="h-3 w-3 mr-1" />
+                          Assigned by: {task.assignedBy.toUpperCase()}
+                      </p>
                  )}
 
                  {task.submittedAt && (

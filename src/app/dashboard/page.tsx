@@ -139,7 +139,9 @@ export default function DashboardPage() {
 
      // Correctly destructure 'usn' which holds the 'all' or specific USN input from the dialog
      // Semester is now number | null
-     const { title, description, dueDate, usn: usnInput, semester } = newTaskData;
+     // Include assignedByName
+     const { title, description, assignedByName, dueDate, usn: usnInput, semester } = newTaskData;
+
 
      // Validate semester (allow null, or 1-8)
      if (semester !== null && (semester < 1 || semester > 8)) {
@@ -203,6 +205,7 @@ export default function DashboardPage() {
             dueDate: dueDate,
             status: TaskStatus.ToBeStarted,
             assignedBy: user.usn, // Already uppercase from context
+            assignedByName: assignedByName, // Add assignedByName
             usn: assignedUsn, // Already uppercase
             semester: semesterTarget, // Add semester (number or null) to the task
          }));
@@ -245,6 +248,11 @@ export default function DashboardPage() {
 
     // Admin view: Apply semester and USN filters
     if (user.role === 'admin') {
+        // Only show tasks assigned BY the current admin
+        if (task.assignedBy !== user.usn) {
+            return false;
+        }
+
         let semesterMatch = false;
          // 1. Check semester filter
         if (selectedSemesterFilter) {
@@ -262,10 +270,10 @@ export default function DashboardPage() {
          // 2. If semester filter is active (or implicitly 'all' semesters if none selected, though UI prevents this now), apply USN filter
          if (selectedSemesterFilter) { // Only filter by USN if a semester filter is active
             if (selectedUsnFilter === 'all') {
-                return true; // Show all tasks for the selected semester/N/A group
+                return true; // Show all tasks for the selected semester/N/A group assigned by this admin
             }
             if (selectedUsnFilter) {
-                // Show tasks for the specific user in the selected semester/N/A group
+                // Show tasks for the specific user in the selected semester/N/A group assigned by this admin
                 // Context ensures task.usn is uppercase, selectedUsnFilter is also uppercase
                 return task.usn === selectedUsnFilter;
             }
@@ -301,7 +309,7 @@ export default function DashboardPage() {
         <h1 className="text-2xl font-semibold text-primary">
           {/* Ensure user.usn and user.semester are displayed (handle null semester) */}
           {user.role === 'admin'
-            ? `Admin Dashboard${user.semester !== null ? ` (Sem ${user.semester})` : ''}`
+            ? `Admin Dashboard${user.semester !== null ? ` (Teacher - Sem ${user.semester})` : ' (Teacher)'}`
             : `Student Dashboard (${user.usn} - Sem ${user.semester === null ? 'N/A' : user.semester})`
           }
         </h1>
@@ -346,7 +354,7 @@ export default function DashboardPage() {
                      disabled={isFetchingUsers || tasksLoading || !selectedSemesterFilter}
                    >
                      <SelectTrigger id="user-filter" className="w-full sm:w-[200px]">
-                       <SelectValue placeholder={isFetchingUsers ? "Loading..." : "Select a user"} />
+                       <SelectValue placeholder={isFetchingUsers ? "Loading..." : "Select user..."} />
                      </SelectTrigger>
                      <SelectContent>
                         <SelectItem value="all">
@@ -355,7 +363,7 @@ export default function DashboardPage() {
                        {filteredStudentList.map(student => (
                          // Ensure value is uppercase
                          <SelectItem key={student.usn} value={student.usn}>
-                           {student.usn} {student.role === 'admin' ? '(Admin)' : ''}
+                           {student.usn} {student.role === 'admin' ? '(Admin/CR)' : ''}
                          </SelectItem>
                        ))}
                         {filteredStudentList.length === 0 && !isFetchingUsers && (
@@ -396,7 +404,9 @@ export default function DashboardPage() {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{taskCounts.total}</div>
-                        <p className="text-xs text-muted-foreground">Visible tasks</p>
+                        <p className="text-xs text-muted-foreground">
+                           {user.role === 'admin' ? `Assigned by you for filter` : 'Your assigned tasks'}
+                        </p>
                     </CardContent>
                 </Card>
                 <Card>
@@ -469,7 +479,7 @@ export default function DashboardPage() {
             <div className="flex flex-col items-center justify-center h-[calc(100vh-350px)] text-center"> {/* Adjusted height */}
                <BookCopy className="h-12 w-12 text-muted-foreground mb-4" />
               <p className="text-lg font-medium text-muted-foreground">Select a semester</p>
-              <p className="text-sm text-muted-foreground">Choose a semester (or N/A) from the dropdown above to view tasks.</p>
+              <p className="text-sm text-muted-foreground">Choose a semester (or N/A) from the dropdown above to view tasks assigned by you.</p>
             </div>
           )}
 
@@ -479,7 +489,7 @@ export default function DashboardPage() {
                <Filter className="h-12 w-12 text-muted-foreground mb-4" />
                <p className="text-lg font-medium text-muted-foreground">Select a user filter</p>
                 <p className="text-sm text-muted-foreground">
-                   Choose 'All Users' or a specific user to view tasks for {selectedSemesterFilter === 'N/A' ? 'N/A' : `Semester ${selectedSemesterFilter}`}.
+                   Choose 'All Users' or a specific user to view tasks assigned by you for {selectedSemesterFilter === 'N/A' ? 'N/A' : `Semester ${selectedSemesterFilter}`}.
                 </p>
              </div>
            )}
@@ -500,9 +510,9 @@ export default function DashboardPage() {
                   <p className="text-lg font-medium text-muted-foreground">No tasks found</p>
                   <p className="text-sm text-muted-foreground">
                      {selectedUsnFilter === 'all'
-                        ? `No tasks found for ${selectedSemesterFilter === 'N/A' ? 'N/A' : `Semester ${selectedSemesterFilter}`}.`
+                        ? `No tasks assigned by you found for ${selectedSemesterFilter === 'N/A' ? 'N/A' : `Semester ${selectedSemesterFilter}`}.`
                        // Ensure displayed USN is uppercase
-                        : `No tasks found for user ${selectedUsnFilter} in ${selectedSemesterFilter === 'N/A' ? 'N/A' : `Semester ${selectedSemesterFilter}`}.`}
+                        : `No tasks assigned by you found for user ${selectedUsnFilter} in ${selectedSemesterFilter === 'N/A' ? 'N/A' : `Semester ${selectedSemesterFilter}`}.`}
                    </p>
               </div>
             )}
