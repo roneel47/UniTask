@@ -3,7 +3,8 @@
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
-import { Skeleton } from '@/components/ui/skeleton';
+// import { Skeleton } from '@/components/ui/skeleton'; // Keep if needed elsewhere, but replaced here
+import { FullPageLoader } from '@/components/layout/full-page-loader'; // Import the new loader
 
 export default function HomePage() {
   const { user, loading } = useAuth();
@@ -21,15 +22,8 @@ export default function HomePage() {
 
   // Show a loading state while checking authentication
   if (loading || user === undefined) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="flex flex-col items-center space-y-4">
-          <Skeleton className="h-12 w-12 rounded-full bg-muted" />
-          <Skeleton className="h-4 w-[250px] bg-muted" />
-          <Skeleton className="h-4 w-[200px] bg-muted" />
-        </div>
-      </div>
-    );
+    // Use the FullPageLoader
+    return <FullPageLoader message="Checking authentication..." />;
   }
 
   // This part should ideally not be reached as the redirect happens,

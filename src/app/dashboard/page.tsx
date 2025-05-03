@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -8,7 +6,7 @@ import { KanbanBoard } from '@/components/kanban/kanban-board';
 import { Task, TaskStatus } from '@/types/task';
 import { User } from '@/types/user'; // Import User type
 import { Button } from '@/components/ui/button';
-import { Plus, Loader2, Filter, BookCopy } from 'lucide-react'; // Added BookCopy icon
+import { Plus, Loader2, Filter, BookCopy, Columns } from 'lucide-react'; // Added Columns icon
 import { CreateTaskDialog } from '@/components/kanban/create-task-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
@@ -22,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from '@/components/ui/label';
+import { LoadingSpinner } from '@/components/layout/loading-spinner'; // Import loading spinner
 
 // Define semester options
 const semesterOptions = Array.from({ length: 8 }, (_, i) => String(i + 1));
@@ -327,15 +326,10 @@ export default function DashboardPage() {
        )}
 
       {tasksLoading ? (
-         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="bg-secondary p-4 rounded-lg shadow animate-pulse">
-              <Skeleton className="h-6 w-3/4 mb-4 bg-muted" />
-              <Skeleton className="h-24 w-full mb-2 bg-muted" />
-              <Skeleton className="h-24 w-full bg-muted" />
-            </div>
-          ))}
-        </div>
+         <div className="flex flex-col items-center justify-center h-[calc(100vh-250px)] text-center">
+              <LoadingSpinner size={48} />
+              <p className="text-lg font-medium text-muted-foreground mt-4 animate-pulse">Loading tasks...</p>
+         </div>
       ) : (
         <>
           {/* Message for admin if no semester is selected */}
@@ -368,6 +362,7 @@ export default function DashboardPage() {
            {/* Message if filters selected but no tasks found */}
            {user?.role === 'admin' && selectedSemesterFilter && selectedUsnFilter && filteredTasks.length === 0 && (
               <div className="flex flex-col items-center justify-center h-[calc(100vh-250px)] text-center">
+                   <Columns className="h-12 w-12 text-muted-foreground mb-4" />
                   <p className="text-lg font-medium text-muted-foreground">No tasks found</p>
                   <p className="text-sm text-muted-foreground">
                      {selectedUsnFilter === 'all'
@@ -381,6 +376,7 @@ export default function DashboardPage() {
              {/* Message if student has no tasks */}
             {user?.role === 'student' && filteredTasks.length === 0 && (
                  <div className="flex flex-col items-center justify-center h-[calc(100vh-250px)] text-center">
+                     <Columns className="h-12 w-12 text-muted-foreground mb-4" />
                      <p className="text-lg font-medium text-muted-foreground">No tasks assigned</p>
                      <p className="text-sm text-muted-foreground">You currently have no tasks.</p>
                  </div>
@@ -400,5 +396,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-  

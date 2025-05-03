@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -11,7 +10,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
-import { AlertCircle, Loader2, Filter, BookCopy, ArrowUpCircle, Trash2, UserX } from 'lucide-react'; // Added Trash2, UserX
+import { AlertCircle, Loader2, Filter, BookCopy, ArrowUpCircle, Trash2, UserX, UserSearch } from 'lucide-react'; // Added UserSearch
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Select,
@@ -32,7 +31,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"; // Added AlertDialog
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'; // Added Tooltip
-
+import { LoadingSpinner } from '@/components/layout/loading-spinner'; // Import loading spinner
 
 // Define semester options for filtering and promotion (add 'all' for filter)
 const filterSemesterOptions = ['all', ...Array.from({ length: 8 }, (_, i) => String(i + 1))];
@@ -217,6 +216,7 @@ export default function ManageUsersPage() {
 
   if (loading || !user) {
     // Show loading skeleton or redirect handled by useEffect
+    // Still using Skeleton here for initial page structure load before full auth check completes
      return (
        <div className="container mx-auto p-4 pt-8">
          <Skeleton className="h-8 w-48 mb-6 bg-muted" />
@@ -245,7 +245,7 @@ export default function ManageUsersPage() {
                 </TableRow>
              </TableHeader>
              <TableBody>
-                {[...Array(3)].map((_, i) => (
+                {[...Array(5)].map((_, i) => ( // Show 5 skeleton rows
                     <TableRow key={i}>
                         <TableCell><Skeleton className="h-5 w-32 bg-muted" /></TableCell>
                         <TableCell><Skeleton className="h-5 w-16 bg-muted" /></TableCell>
@@ -257,6 +257,10 @@ export default function ManageUsersPage() {
                 ))}
              </TableBody>
            </Table>
+           <div className="flex items-center justify-center p-6 text-muted-foreground">
+               <LoadingSpinner size={24} className="mr-2" />
+               Loading users...
+           </div>
          </div>
        </div>
      );
@@ -389,6 +393,10 @@ export default function ManageUsersPage() {
                 ))}
              </TableBody>
            </Table>
+             <div className="flex items-center justify-center p-6 text-muted-foreground">
+               <LoadingSpinner size={24} className="mr-2" />
+               Loading users...
+            </div>
          </div>
       ) : (
         <div className="border rounded-lg overflow-hidden">
@@ -495,9 +503,13 @@ export default function ManageUsersPage() {
             </TableBody>
           </Table>
            {filteredUsers.length === 0 && !isDataLoading && (
-              <p className="p-4 text-center text-muted-foreground">
-                  {selectedSemesterFilter === 'all' ? 'No users found.' : `No users found for Semester ${selectedSemesterFilter}.`}
-              </p>
+              <div className="flex flex-col items-center justify-center p-10 text-center">
+                 <UserSearch className="h-12 w-12 text-muted-foreground mb-4" />
+                 <p className="text-lg font-medium text-muted-foreground">No users found</p>
+                  <p className="text-sm text-muted-foreground">
+                     {selectedSemesterFilter === 'all' ? 'No users match the current filters.' : `No users found for Semester ${selectedSemesterFilter}.`}
+                  </p>
+              </div>
            )}
         </div>
       )}

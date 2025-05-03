@@ -67,6 +67,14 @@ export default {
   			sm: 'calc(var(--radius) - 4px)'
   		},
   		keyframes: {
+            spin: { // Make sure spin is defined if using animate-spin
+                from: { transform: 'rotate(0deg)' },
+                to: { transform: 'rotate(360deg)' },
+            },
+            pulse: { // Make sure pulse is defined if using animate-pulse
+               '0%, 100%': { opacity: '1' },
+               '50%': { opacity: '.5' },
+            },
   			'accordion-down': {
   				from: {
   					height: '0'
@@ -85,6 +93,8 @@ export default {
   			}
   		},
   		animation: {
+            spin: 'spin 1s linear infinite', // Ensure spin animation utility exists
+            pulse: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite', // Ensure pulse animation utility exists
   			'accordion-down': 'accordion-down 0.2s ease-out',
   			'accordion-up': 'accordion-up 0.2s ease-out'
   		}

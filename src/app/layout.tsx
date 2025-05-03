@@ -35,8 +35,10 @@ export default function RootLayout({
             disableTransitionOnChange
           >
           <AuthProvider>
-            <div className="relative flex min-h-screen flex-col">
-              <Header />
+            {/* Header remains sticky at the top */}
+            <Header />
+            {/* Main content area */}
+            <div className="relative flex min-h-[calc(100vh-3.5rem)] flex-col"> {/* Adjust min-height based on header */}
               <main className="flex-1">{children}</main>
             </div>
             <Toaster />
