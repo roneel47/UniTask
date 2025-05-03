@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useContext } from 'react';
@@ -8,21 +9,21 @@ export const useAuth = () => {
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
-  // Ensure all functions are returned, including task-related ones
+  // Ensure all functions are returned, including task-related ones and updated register signature
   const {
     user,
     loading,
     login,
     logout,
-    register,
+    register, // Now expects (usn, semester, password)
     updateUserRole,
     getAllUsers,
-    tasks, // Added
-    tasksLoading, // Added
-    updateTask, // Added
-    addTask, // Added
-    addMultipleTasks, // Added
-    deleteTask, // Added
+    tasks,
+    tasksLoading,
+    updateTask,
+    addTask,
+    addMultipleTasks,
+    deleteTask,
   } = context;
 
   return {

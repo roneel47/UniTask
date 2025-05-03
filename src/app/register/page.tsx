@@ -18,6 +18,13 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
@@ -26,12 +33,16 @@ const formSchema = z.object({
   usn: z.string().min(10, { message: 'USN must be at least 10 characters.' }).max(10, { message: 'USN must be at most 10 characters.' }).regex(/^[1-4][A-Z]{2}[0-9]{2}[A-Z]{2}[0-9]{3}$/i, { message: 'Invalid USN format.' }),
   password: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
   confirmPassword: z.string(),
+  semester: z.string().refine(val => /^[1-8]$/.test(val), { message: 'Semester must be between 1 and 8.' }), // Add semester validation
   // Optional fields, can add later
   // name: z.string().min(1, { message: 'Name is required.' }),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"], // path of error
 });
+
+// Define semester options
+const semesterOptions = Array.from({ length: 8 }, (_, i) => String(i + 1));
 
 export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
@@ -45,6 +56,7 @@ export default function RegisterPage() {
       usn: '',
       password: '',
       confirmPassword: '',
+      semester: '', // Default semester value
       // name: '',
     },
   });
@@ -52,7 +64,8 @@ export default function RegisterPage() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
     try {
-      await register(values.usn.toUpperCase(), values.password);
+      // Pass semester to register function
+      await register(values.usn.toUpperCase(), parseInt(values.semester, 10), values.password);
       toast({
         title: "Registration Successful",
         description: "You can now log in.",
@@ -107,6 +120,30 @@ export default function RegisterPage() {
                   </FormItem>
                 )}
               />
+               <FormField
+                  control={form.control}
+                  name="semester"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Semester</FormLabel>
+                       <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isLoading}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select your current semester" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {semesterOptions.map((sem) => (
+                            <SelectItem key={sem} value={sem}>
+                              {sem}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               <FormField
                 control={form.control}
                 name="password"

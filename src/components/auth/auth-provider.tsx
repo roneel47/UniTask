@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { createContext, useState, useEffect, ReactNode, useCallback } from 'react';
@@ -12,7 +13,7 @@ interface AuthContextType {
   tasksLoading: boolean; // Add loading state for tasks
   login: (usn: string, password?: string) => Promise<void>;
   logout: () => void;
-  register: (usn: string, password?: string) => Promise<void>;
+  register: (usn: string, semester: number, password?: string) => Promise<void>; // Added semester
   updateUserRole: (usn: string, role: 'student' | 'admin') => Promise<void>;
   getAllUsers: () => Promise<User[]>;
   updateTask: (taskId: string, updates: Partial<Task>) => Promise<void>; // Function to update a task
@@ -30,24 +31,27 @@ interface AuthProviderProps {
 
 // Initial Mock Data (only used if localStorage is empty)
 const initialMockUsers: User[] = [
-  { usn: '1RG22CS001', role: 'admin', password: 'adminpassword' },
-  { usn: 'TEACHER001', role: 'admin', password: 'adminpassword' },
-  ...Array.from({ length: 5 }, (_, i) => ({
-    usn: `1RG22CS${String(i + 2).padStart(3, '0')}`,
-    role: 'student' as 'student',
-    password: 'studentpassword',
-  })),
+  { usn: '1RG22CS001', role: 'admin', semester: 6, password: 'adminpassword' }, // Admin associated with a default semester
+  { usn: 'TEACHER001', role: 'admin', semester: 0, password: 'adminpassword' }, // Another admin (can handle multiple sems)
+  // Students in different semesters
+  { usn: '1RG22CS002', role: 'student', semester: 6, password: 'studentpassword' },
+  { usn: '1RG22CS003', role: 'student', semester: 6, password: 'studentpassword' },
+  { usn: '1RG23CS050', role: 'student', semester: 4, password: 'studentpassword' },
+  { usn: '1RG23CS051', role: 'student', semester: 4, password: 'studentpassword' },
+  { usn: '1RG24CS100', role: 'student', semester: 2, password: 'studentpassword' },
+  { usn: '1RG24CS101', role: 'student', semester: 2, password: 'studentpassword' },
+  { usn: '1RG21CS200', role: 'student', semester: 8, password: 'studentpassword' },
 ];
 
 const initialMockTasks: Task[] = [
- { id: '1-1RG22CS001', title: 'Complete Project Proposal', description: 'Finalize and submit the project proposal document.', dueDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000), status: TaskStatus.ToBeStarted, assignedBy: 'Prof. Smith', usn: '1RG22CS001' },
-  { id: '2-1RG22CS001', title: 'Study for Midterm Exam', description: 'Review chapters 1-5 for the upcoming exam.', dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000), status: TaskStatus.InProgress, assignedBy: 'Prof. Doe', usn: '1RG22CS001' },
-  { id: '3-1RG22CS001', title: 'Lab Assignment 3', description: 'Implement the algorithm described in the lab manual.', dueDate: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000), status: TaskStatus.Completed, assignedBy: 'TA Jane', usn: '1RG22CS001' },
-   { id: '4-1RG22CS001', title: 'Prepare Presentation', description: 'Create slides for the group presentation.', dueDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000), status: TaskStatus.Submitted, assignedBy: 'Prof. Doe', usn: '1RG22CS001', submittedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) },
-   { id: '5-1RG22CS001', title: 'Read Research Paper', description: 'Analyze the assigned research paper.', dueDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000), status: TaskStatus.Done, assignedBy: 'Prof. Smith', usn: '1RG22CS001', completedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000) },
-   { id: '6-1RG22CS002', title: 'Code Review Session', description: 'Participate in the peer code review.', dueDate: new Date(Date.now() + 3 * 60 * 60 * 1000), status: TaskStatus.ToBeStarted, assignedBy: 'TA Jane', usn: '1RG22CS002' }, // Different USN
-   // Add a task for another student
-   { id: '7-1RG22CS003', title: 'Essay Draft 1', description: 'Write the first draft of the literature essay.', dueDate: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000), status: TaskStatus.ToBeStarted, assignedBy: 'Prof. Smith', usn: '1RG22CS003' },
+ { id: '1-1RG22CS002', title: '6th Sem Project Proposal', description: 'Finalize and submit the project proposal document.', dueDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000), status: TaskStatus.ToBeStarted, assignedBy: '1RG22CS001', usn: '1RG22CS002', semester: 6 },
+  { id: '2-1RG22CS003', title: '6th Sem Study for Midterm', description: 'Review chapters 1-5 for the upcoming exam.', dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000), status: TaskStatus.InProgress, assignedBy: '1RG22CS001', usn: '1RG22CS003', semester: 6 },
+  { id: '3-1RG23CS050', title: '4th Sem Lab Assignment 3', description: 'Implement the algorithm described in the lab manual.', dueDate: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000), status: TaskStatus.Completed, assignedBy: 'TEACHER001', usn: '1RG23CS050', semester: 4 },
+   { id: '4-1RG23CS051', title: '4th Sem Prepare Presentation', description: 'Create slides for the group presentation.', dueDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000), status: TaskStatus.Submitted, assignedBy: 'TEACHER001', usn: '1RG23CS051', semester: 4, submittedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) },
+   { id: '5-1RG24CS100', title: '2nd Sem Read Research Paper', description: 'Analyze the assigned research paper.', dueDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000), status: TaskStatus.Done, assignedBy: 'TEACHER001', usn: '1RG24CS100', semester: 2, completedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000) },
+   { id: '6-1RG21CS200', title: '8th Sem Code Review', description: 'Participate in the peer code review.', dueDate: new Date(Date.now() + 3 * 60 * 60 * 1000), status: TaskStatus.ToBeStarted, assignedBy: '1RG22CS001', usn: '1RG21CS200', semester: 8 },
+   // Task assigned to 'all' students of a specific semester
+   { id: 'all-sem6-task1', title: 'All 6th Sem: Ethics Quiz', description: 'Complete the online ethics quiz.', dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), status: TaskStatus.ToBeStarted, assignedBy: '1RG22CS001', usn: 'all', semester: 6 },
 ];
 
 
@@ -80,6 +84,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
             dueDate: new Date(task.dueDate),
             submittedAt: task.submittedAt ? new Date(task.submittedAt) : undefined,
             completedAt: task.completedAt ? new Date(task.completedAt) : undefined,
+             // Ensure semester is a number, default to 0 or handle appropriately if missing
+            semester: typeof task.semester === 'number' ? task.semester : 0,
         }));
         } catch (error) {
         console.error("Failed to parse tasks from storage:", error);
@@ -87,21 +93,52 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
     };
 
+     const serializeUsers = (usersToSerialize: User[]): string => {
+        // Remove password before saving
+        return JSON.stringify(usersToSerialize.map(({ password, ...user }) => user));
+     };
 
-  // Load initial data and check session on mount
+      const deserializeUsers = (usersString: string | null): User[] => {
+        if (!usersString) return [];
+        try {
+            return JSON.parse(usersString).map((user: any) => ({
+                ...user,
+                // Ensure semester is number, default if missing/invalid
+                semester: typeof user.semester === 'number' ? user.semester : 0,
+                // Password is not stored/retrieved here for security simulation
+            }));
+        } catch (error) {
+            console.error("Failed to parse users from storage:", error);
+            return [];
+        }
+      };
+
+
+    // --- Load initial data and check session on mount ---
   useEffect(() => {
     const loadInitialData = () => {
       setLoading(true);
       setTasksLoading(true);
+      let loadedUsers: User[] = [];
       try {
-        // Load users
+        // Load users (without passwords initially)
         const storedMockUsers = localStorage.getItem('uniTaskMockUsers');
-        if (storedMockUsers) {
-          setMockUsers(JSON.parse(storedMockUsers));
+        loadedUsers = deserializeUsers(storedMockUsers);
+
+        if (loadedUsers.length === 0) {
+            // If storage empty, use initial mock (which includes passwords)
+            setMockUsers(initialMockUsers); // State now has users with passwords
+            localStorage.setItem('uniTaskMockUsers', serializeUsers(initialMockUsers)); // Save without passwords
         } else {
-          setMockUsers(initialMockUsers);
-          localStorage.setItem('uniTaskMockUsers', JSON.stringify(initialMockUsers));
+            // Merge stored users (no passwords) with initial mock (has passwords)
+            // to retain passwords for login simulation without storing them plain
+             const usersWithPasswords = loadedUsers.map(loadedUser => {
+                 const initialUser = initialMockUsers.find(u => u.usn === loadedUser.usn);
+                 return { ...loadedUser, password: initialUser?.password };
+             });
+            setMockUsers(usersWithPasswords);
         }
+
 
         // Load tasks
         const storedTasks = localStorage.getItem('uniTaskTasks');
@@ -118,7 +155,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
         // Check for logged-in user session
         const storedUser = localStorage.getItem('uniTaskUser');
         if (storedUser) {
-          setUser(JSON.parse(storedUser));
+          const parsedUser = JSON.parse(storedUser);
+           // Ensure semester is correctly loaded for the session user
+          setUser({
+              ...parsedUser,
+              semester: typeof parsedUser.semester === 'number' ? parsedUser.semester : 0,
+          });
         }
       } catch (error) {
         console.error("Failed to load data from storage:", error);
@@ -126,8 +168,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
         localStorage.removeItem('uniTaskUser');
         localStorage.removeItem('uniTaskMockUsers');
         localStorage.removeItem('uniTaskTasks');
-        setMockUsers(initialMockUsers); // Reset to initial state
+        setMockUsers(initialMockUsers); // Reset to initial state (with passwords)
+        localStorage.setItem('uniTaskMockUsers', serializeUsers(initialMockUsers)); // Save without passwords
         setTasks(initialMockTasks); // Reset tasks
+        localStorage.setItem('uniTaskTasks', serializeTasks(initialMockTasks));
       } finally {
         setLoading(false);
         setTasksLoading(false);
@@ -136,10 +180,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     loadInitialData();
   }, []);
 
-  // Helper function to save mock users to localStorage
+  // Helper function to save mock users to localStorage (removes passwords)
   const saveMockUsers = useCallback((updatedUsers: User[]) => {
-    setMockUsers(updatedUsers);
-    localStorage.setItem('uniTaskMockUsers', JSON.stringify(updatedUsers));
+    setMockUsers(updatedUsers); // Keep passwords in runtime state
+    localStorage.setItem('uniTaskMockUsers', serializeUsers(updatedUsers)); // Save without passwords
   }, []);
 
     // Helper function to save tasks to localStorage
@@ -160,11 +204,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       throw new Error("USN not found.");
     }
 
-    // Simplified password check for demo
+    // Simplified password check for demo (checking against runtime state which has passwords)
     if (foundUser.password === password) {
       const { password: _, ...userToStore } = foundUser;
-      setUser(userToStore);
-      localStorage.setItem('uniTaskUser', JSON.stringify(userToStore));
+      setUser(userToStore); // Update runtime user state
+      localStorage.setItem('uniTaskUser', JSON.stringify(userToStore)); // Save user session (without password)
       setLoading(false);
     } else {
       setLoading(false);
@@ -172,7 +216,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
-  const register = async (usn: string, password?: string): Promise<void> => {
+  const register = async (usn: string, semester: number, password?: string): Promise<void> => {
     setLoading(true);
     await new Promise(resolve => setTimeout(resolve, 500));
 
@@ -187,14 +231,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
         throw new Error("Password must be at least 6 characters long.");
     }
 
+     if (semester < 1 || semester > 8) {
+       setLoading(false);
+       throw new Error("Invalid semester. Must be between 1 and 8.");
+     }
+
+
     const newUser: User = {
       usn: usn.toUpperCase(),
       role: 'student',
-      password: password,
+      semester: semester, // Assign semester
+      password: password, // Store password in runtime state for login check
     };
 
     const updatedUsers = [...mockUsers, newUser];
-    saveMockUsers(updatedUsers);
+    saveMockUsers(updatedUsers); // Saves to state (with pw) and localStorage (without pw)
 
     setLoading(false);
   };
@@ -219,16 +270,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     const updatedUsers = [...mockUsers];
+    // Also ensure semester is preserved (or potentially allow admin to change it too?)
     updatedUsers[userIndex] = { ...updatedUsers[userIndex], role: role };
 
     saveMockUsers(updatedUsers);
 
-    if (user && user.usn.toUpperCase() === usn.toUpperCase()) {
-        const { password: _, ...userToStore } = updatedUsers[userIndex];
-        setUser(userToStore);
-        localStorage.setItem('uniTaskUser', JSON.stringify(userToStore));
-    }
-
+    // If the currently logged-in admin modifies *another* user who happens to be logged in elsewhere,
+    // their session data won't update automatically here. This implementation only updates the modifier's session
+    // if they were somehow changing their own role (which is prevented above).
+    // For a real app, you'd need a mechanism (like WebSockets or periodic checks) to update other active sessions.
 
     setLoading(false);
   };
@@ -238,6 +288,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         throw new Error("Permission denied. Only administrators can view user list.");
     }
      await new Promise(resolve => setTimeout(resolve, 300));
+     // Return users without passwords from the runtime state
      return mockUsers.map(({ password, ...userWithoutPassword }) => userWithoutPassword);
   }
 
@@ -262,7 +313,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     const updatedTasks = [...tasks];
-    updatedTasks[taskIndex] = { ...updatedTasks[taskIndex], ...updates };
+     // Ensure semester isn't accidentally overwritten if not included in updates
+    const currentSemester = updatedTasks[taskIndex].semester;
+    updatedTasks[taskIndex] = {
+        ...updatedTasks[taskIndex],
+        ...updates,
+        semester: updates.semester ?? currentSemester, // Preserve semester if not explicitly updated
+    };
+
 
     // Add timestamp logic based on status change if needed
     if (updates.status) {
@@ -290,6 +348,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (user?.role !== 'admin') {
           throw new Error("Permission denied. Only administrators can create tasks.");
       }
+       if (typeof newTask.semester !== 'number' || newTask.semester < 1 || newTask.semester > 8) {
+            throw new Error("Invalid or missing semester for the new task.");
+        }
       setTasksLoading(true);
       await new Promise(resolve => setTimeout(resolve, 200)); // Simulate creation delay
 
@@ -311,6 +372,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
           throw new Error("Permission denied. Only administrators can create tasks.");
       }
       if (newTasks.length === 0) return;
+
+       // Validate all tasks have a valid semester
+       for (const task of newTasks) {
+           if (typeof task.semester !== 'number' || task.semester < 1 || task.semester > 8) {
+               throw new Error(`Invalid or missing semester for task "${task.title}".`);
+           }
+       }
 
       setTasksLoading(true);
       await new Promise(resolve => setTimeout(resolve, 200 + newTasks.length * 10)); // Slightly longer delay for multiple

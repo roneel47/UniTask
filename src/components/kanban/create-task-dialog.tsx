@@ -1,3 +1,4 @@
+
 "use client";
 
 import React from 'react'; // Removed useState as isLoading comes from props
@@ -29,19 +30,31 @@ import { Calendar } from '@/components/ui/calendar';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Task } from '@/types/task';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface CreateTaskDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreate: (taskData: Omit<Task, 'id' | 'status' | 'assignedBy'>) => void;
+  onCreate: (taskData: Omit<Task, 'id' | 'status' | 'assignedBy'>) => Promise<void>; // Made onCreate async
   isLoading: boolean; // Add isLoading prop
 }
+
+// Define semester options
+const semesterOptions = Array.from({ length: 8 }, (_, i) => String(i + 1));
+
 
 const formSchema = z.object({
   title: z.string().min(1, { message: 'Title is required.' }),
   description: z.string().min(1, { message: 'Description is required.' }),
   dueDate: z.date({ required_error: 'Due date is required.' }),
   assignTo: z.string().min(1, {message: "Specify who to assign to ('all' or USN)."} ),
+  semester: z.string().refine(val => /^[1-8]$/.test(val), { message: 'Semester must be selected.' }), // Add semester validation
   // attachmentUrl: z.string().url().optional(), // Optional
 });
 
@@ -54,7 +67,8 @@ export function CreateTaskDialog({ isOpen, onClose, onCreate, isLoading }: Creat
       title: '',
       description: '',
       dueDate: undefined,
-      assignTo: 'all',
+      assignTo: 'all', // Default to 'all' for the selected semester
+      semester: '', // Default semester value
     },
   });
 
@@ -73,10 +87,11 @@ export function CreateTaskDialog({ isOpen, onClose, onCreate, isLoading }: Creat
             title: values.title,
             description: values.description,
             dueDate: values.dueDate,
-            usn: values.assignTo,
+            usn: values.assignTo, // 'all' or specific USN
+            semester: parseInt(values.semester, 10), // Ensure semester is a number
             // attachmentUrl: values.attachmentUrl,
         };
-        await onCreate(taskData); // Make onCreate potentially async if needed in parent
+        await onCreate(taskData); // Call the async onCreate from props
         // Success handling (closing dialog, resetting form) is now managed in the parent's handleCreateTask
          form.reset(); // Reset form on successful submission *after* parent handles it
          // onClose(); // Let parent decide when to close
@@ -126,6 +141,30 @@ export function CreateTaskDialog({ isOpen, onClose, onCreate, isLoading }: Creat
               )}
             />
              <FormField
+                control={form.control}
+                name="semester"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Target Semester</FormLabel>
+                     <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isLoading}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select target semester" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {semesterOptions.map((sem) => (
+                          <SelectItem key={sem} value={sem}>
+                            {sem}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+             <FormField
               control={form.control}
               name="assignTo"
               render={({ field }) => (
@@ -135,7 +174,7 @@ export function CreateTaskDialog({ isOpen, onClose, onCreate, isLoading }: Creat
                      <Input placeholder="Enter 'all' or specific USN (e.g., 1RG22CS005)" {...field} disabled={isLoading} />
                   </FormControl>
                    <FormMessage />
-                   <p className="text-xs text-muted-foreground">Use 'all' to assign to all current student users.</p>
+                   <p className="text-xs text-muted-foreground">Use 'all' to assign to all students in the selected semester.</p>
                 </FormItem>
               )}
             />

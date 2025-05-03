@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Draggable } from '@hello-pangea/dnd';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -5,7 +6,7 @@ import { Task, TaskStatus } from '@/types/task';
 import { Badge } from '@/components/ui/badge';
 import { getDueDateColor, formatDueDate } from '@/lib/date-utils';
 import { Button } from '@/components/ui/button';
-import { Upload, Download, Edit, Trash2, Paperclip, CheckCircle, Clock, Loader2, User } from 'lucide-react'; // Added User icon
+import { Upload, Download, Edit, Trash2, Paperclip, CheckCircle, Clock, Loader2, User, BookCopy } from 'lucide-react'; // Added User, BookCopy icons
 import {
   Tooltip,
   TooltipContent,
@@ -155,11 +156,17 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
             >
                 {task.title}
             </CardTitle>
-            {/* Display Assigned USN */}
-            {isAdmin && ( // Only show USN to admins for clarity, can be shown always too
-                <div className="flex items-center text-xs text-muted-foreground pt-1">
-                    <User className="h-3 w-3 mr-1" />
-                    <span>{task.usn}</span>
+            {/* Display Assigned USN and Semester for Admin */}
+            {isAdmin && (
+                <div className="flex items-center space-x-3 text-xs text-muted-foreground pt-1">
+                    <span className="flex items-center">
+                        <User className="h-3 w-3 mr-1" />
+                        {task.usn}
+                    </span>
+                     <span className="flex items-center">
+                        <BookCopy className="h-3 w-3 mr-1" />
+                        Sem {task.semester}
+                    </span>
                 </div>
             )}
             <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
