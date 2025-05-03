@@ -5,8 +5,8 @@ import React, { createContext, useState, useEffect, ReactNode, useCallback } fro
 import { User } from '@/types/user';
 import { Task, TaskStatus } from '@/types/task'; // Import Task types
 
-// Define the master admin USN (must be uppercase)
-const MASTER_ADMIN_USN = 'RONEELV1244'; // Updated Master Admin USN
+// Define the master admin USN (must be uppercase) - NEW CREDENTIALS
+const MASTER_ADMIN_USN = 'MASTERADMIN1'; // New Master Admin USN
 
 // Define the shape of the authentication context
 interface AuthContextType {
@@ -38,8 +38,8 @@ interface AuthProviderProps {
 // Initial Mock Data (only used if localStorage is empty)
 // Only one admin initially
 const initialMockUsers: User[] = [
-  // Ensure the master admin USN is uppercase here
-  { usn: MASTER_ADMIN_USN, role: 'admin', semester: 0, password: 'Pass@123' }, // Updated password
+  // Ensure the master admin USN is uppercase here - NEW CREDENTIALS
+  { usn: MASTER_ADMIN_USN, role: 'admin', semester: 0, password: 'MasterPass!456' }, // New password
 ];
 
 // Initial Mock Tasks (kept for demonstration, adjust as needed if no students exist initially)

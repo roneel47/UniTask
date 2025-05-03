@@ -39,8 +39,8 @@ const filterSemesterOptions = ['all', ...Array.from({ length: 8 }, (_, i) => Str
 // Semesters eligible for promotion (1-7)
 const promotableSemesterOptions = Array.from({ length: 7 }, (_, i) => String(i + 1));
 
-// Define the master admin USN (must be uppercase) - used for UI checks
-const MASTER_ADMIN_USN = 'RONEELV1244'; // Updated Master Admin USN
+// Define the master admin USN (must be uppercase) - used for UI checks - NEW CREDENTIALS
+const MASTER_ADMIN_USN = 'MASTERADMIN1'; // New Master Admin USN
 
 export default function ManageUsersPage() {
   const {
