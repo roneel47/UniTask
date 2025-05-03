@@ -24,12 +24,18 @@ import { Loader2 } from 'lucide-react';
 
 const formSchema = z.object({
   usn: z.string().min(10, { message: 'USN must be at least 10 characters.' }).max(10, { message: 'USN must be at most 10 characters.' }).regex(/^[1-4][A-Z]{2}[0-9]{2}[A-Z]{2}[0-9]{3}$/i, { message: 'Invalid USN format.' }),
-  password: z.string().min(1, { message: 'Password is required.' }),
+  password: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
+  confirmPassword: z.string(),
+  // Optional fields, can add later
+  // name: z.string().min(1, { message: 'Name is required.' }),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"], // path of error
 });
 
-export default function LoginPage() {
+export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
-  const { login } = useAuth();
+  const { register } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -38,23 +44,25 @@ export default function LoginPage() {
     defaultValues: {
       usn: '',
       password: '',
+      confirmPassword: '',
+      // name: '',
     },
   });
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
     try {
-      await login(values.usn.toUpperCase(), values.password);
+      await register(values.usn.toUpperCase(), values.password);
       toast({
-        title: "Login Successful",
-        description: "Welcome back!",
+        title: "Registration Successful",
+        description: "You can now log in.",
       });
-      router.push('/dashboard'); // Redirect to dashboard after successful login
+      router.push('/login'); // Redirect to login after successful registration
     } catch (error: any) {
-      console.error("Login failed:", error);
+      console.error("Registration failed:", error);
       toast({
         variant: "destructive",
-        title: "Login Failed",
+        title: "Registration Failed",
         description: error.message || "An unexpected error occurred. Please try again.",
       });
     } finally {
@@ -67,11 +75,25 @@ export default function LoginPage() {
       <Card className="w-full max-w-sm shadow-lg">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold text-primary">UniTask</CardTitle>
-          <CardDescription>Login with your University Serial Number (USN)</CardDescription>
+          <CardDescription>Create your student account</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              {/* Optional Name Field */}
+              {/* <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Full Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Your Name" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              /> */}
               <FormField
                 control={form.control}
                 name="usn"
@@ -92,7 +114,20 @@ export default function LoginPage() {
                   <FormItem>
                     <FormLabel>Password</FormLabel>
                     <FormControl>
-                      <Input type="password" placeholder="********" {...field} autoComplete="current-password" />
+                      <Input type="password" placeholder="********" {...field} autoComplete="new-password" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="confirmPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Confirm Password</FormLabel>
+                    <FormControl>
+                      <Input type="password" placeholder="********" {...field} autoComplete="new-password" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -100,16 +135,16 @@ export default function LoginPage() {
               />
               <Button type="submit" className="w-full bg-accent text-accent-foreground hover:bg-accent/90" disabled={isLoading}>
                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Login
+                Register
               </Button>
             </form>
           </Form>
         </CardContent>
-         <CardFooter className="flex justify-center text-sm">
+        <CardFooter className="flex justify-center text-sm">
           <p>
-            Don't have an account?{' '}
-            <Link href="/register" className="text-primary hover:underline">
-              Register here
+            Already have an account?{' '}
+            <Link href="/login" className="text-primary hover:underline">
+              Login here
             </Link>
           </p>
         </CardFooter>

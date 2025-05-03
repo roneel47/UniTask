@@ -1,3 +1,4 @@
+
 "use client";
 
 import React from 'react';
@@ -13,7 +14,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/hooks/use-auth';
-import { LogOut, User as UserIcon, ChevronsUpDown } from 'lucide-react';
+import { LogOut, User as UserIcon, Users, ChevronsUpDown } from 'lucide-react'; // Added Users icon
 import { useRouter } from 'next/navigation';
 
 export function Header() {
@@ -45,6 +46,13 @@ export function Header() {
             <span className="font-bold text-primary">UniTask</span>
           </Link>
           {/* Add navigation links here if needed */}
+           {user && ( // Show dashboard link only when logged in
+             <nav className="flex items-center space-x-4">
+               <Link href="/dashboard" className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
+                 Dashboard
+               </Link>
+              </nav>
+           )}
         </div>
         <div className="flex flex-1 items-center justify-end space-x-4">
           <nav className="flex items-center space-x-1">
@@ -73,6 +81,15 @@ export function Header() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                   {/* Add Manage Users link for admins */}
+                  {user.role === 'admin' && (
+                    <DropdownMenuItem asChild>
+                       <Link href="/dashboard/admin/users">
+                          <Users className="mr-2 h-4 w-4" />
+                          <span>Manage Users</span>
+                       </Link>
+                    </DropdownMenuItem>
+                  )}
                   {/* <DropdownMenuItem>
                     <UserIcon className="mr-2 h-4 w-4" />
                     <span>Profile</span>
