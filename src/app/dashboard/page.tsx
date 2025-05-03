@@ -7,7 +7,7 @@ import { KanbanBoard } from '@/components/kanban/kanban-board';
 import { Task, TaskStatus } from '@/types/task';
 import { User } from '@/types/user'; // Import User type
 import { Button } from '@/components/ui/button';
-import { Plus, Loader2, Filter, BookCopy, Columns, ListTodo, Play, Check, CheckCheck, Inbox, RefreshCw, Edit, Trash2, Download } from 'lucide-react'; // Added icons
+import { Plus, Loader2, Filter, BookCopy, Columns, ListTodo, Play, Check, CheckCheck, Inbox, RefreshCw, Edit, Trash2, Download, History } from 'lucide-react'; // Added History icon
 import { CreateTaskDialog } from '@/components/kanban/create-task-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
@@ -31,18 +31,8 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"; // Import Table components
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"; // Import AlertDialog
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'; // Import Tooltip
+// AlertDialog is no longer needed in this file after removing delete from submitted table
+// Tooltip is no longer needed here
 import { format } from 'date-fns'; // Import format for dates
 
 
@@ -75,8 +65,7 @@ export default function DashboardPage() {
   const [filteredStudentList, setFilteredStudentList] = useState<User[]>([]); // Students/Admins filtered by selected semester
   const [isFetchingUsers, setIsFetchingUsers] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false); // State for refresh button loading
-  const [isDeletingTask, setIsDeletingTask] = useState<string | null>(null); // Track task deletion
-
+  // isDeletingTask state removed as delete button moved from this file context
 
    // Fetch all users for admin dropdowns
    useEffect(() => {
@@ -161,19 +150,23 @@ export default function DashboardPage() {
   };
 
  const handleCreateTask = async (newTaskData: Omit<Task, 'id' | 'status' | 'assignedBy'>) => {
-     if (!user || user.role !== 'admin') return Promise.reject("Permission denied.");
+     if (!user || user.role !== 'admin' || isMasterAdmin) return Promise.reject("Permission denied."); // Prevent master admin from creating via this dialog
 
      setIsCreatingTask(true);
      setAssignmentError(null);
      console.log("Creating new task with data:", newTaskData);
 
-     const { title, description, assignedByName, dueDate, usn: usnInput, semester } = newTaskData;
+     const { title, description, assignedByName, dueDate, usn: usnInput, semester: semesterString } = newTaskData;
 
-     if (semester !== null && (semester < 1 || semester > 8)) {
+     // Convert semester string ('1'-'8', 'N/A') to number | null
+      const semesterTarget = semesterString === 'N/A' ? null : parseInt(semesterString, 10);
+
+     if (semesterTarget !== null && (semesterTarget < 1 || semesterTarget > 8)) {
          setAssignmentError("Invalid semester selected. Must be 1-8 or N/A.");
          setIsCreatingTask(false);
          return Promise.reject("Invalid semester selected.");
      }
+
 
      if (usnInput === undefined || usnInput === null) {
          setAssignmentError("Assignment target (USN or 'all') is missing.");
@@ -183,7 +176,6 @@ export default function DashboardPage() {
 
      try {
          let targetUsns: string[] = [];
-         const semesterTarget = semester; // number | null
          const assignmentTarget = usnInput.trim();
          console.log(`Assignment Target: '${assignmentTarget}', Semester Target: ${semesterTarget}`);
 
@@ -236,20 +228,14 @@ export default function DashboardPage() {
              assignedBy: user.usn, // Already uppercase from context
              assignedByName: assignedByName,
              usn: assignedUsn, // Already uppercase
-             semester: semesterTarget,
+             semester: semesterTarget, // Use the number | null value
          }));
 
          console.log("Tasks to be added:", tasksToAdd);
          await addMultipleTasks(tasksToAdd); // Calls context function
 
-         // --- Retroactive Assignment (for tasks assigned to 'all') ---
-         if (assignmentTarget.toLowerCase() === 'all') {
-            // Find users who *newly registered* after this task assignment might have started
-            // This is tricky with mock data, better approach is registration hook
-            // However, we can rely on the registration logic to retroactively assign
-            console.log("Registration logic handles retroactive assignment for new users.");
-         }
-         // --- End of Retroactive Handling ---
+         // --- Retroactive Assignment is handled by registration logic in AuthProvider ---
+         console.log("Registration logic handles retroactive assignment for new users.");
 
 
          const semDisplay = semesterTarget === null ? 'N/A' : `semester ${semesterTarget}`;
@@ -258,6 +244,9 @@ export default function DashboardPage() {
              description: `Task assigned to ${assignmentTarget.toLowerCase() === 'all' ? targetUsns.length + ` user(s) in ${semDisplay}` : assignmentTarget.toUpperCase()}.`,
          });
          setIsCreateTaskOpen(false); // Close dialog on success
+
+         // --- Refresh tasks locally after creation ---
+         await fetchTasks(); // Fetch updated tasks list
 
      } catch (error: any) {
          console.error("Failed to create task(s):", error);
@@ -275,7 +264,7 @@ export default function DashboardPage() {
  };
 
 
-  // Filter tasks based on role and selected filters (semester and USN)
+  // Filter tasks for the Kanban board based on role and selected filters
   const filteredTasks = useMemo(() => {
      if (!user) return []; // Should not happen due to layout guard
 
@@ -295,56 +284,38 @@ export default function DashboardPage() {
         // Determine target semester value (number or null)
          const targetSemesterValue = selectedSemesterFilter === 'N/A' ? null : parseInt(selectedSemesterFilter, 10);
 
-         // --- Master Admin View: Shows tasks ASSIGNED TO the filtered user/semester ---
-         if (isMasterAdmin) {
-             return tasks.filter(task => {
-                 // 1. Match semester
-                 const semesterMatch = task.semester === targetSemesterValue;
-                 if (!semesterMatch) return false;
+         // Filter tasks matching the selected semester and USN filter
+          return tasks.filter(task => {
+                // 1. Match semester
+                const semesterMatch = task.semester === targetSemesterValue;
+                if (!semesterMatch) return false;
 
-                 // 2. Match USN filter ('all' or specific)
-                 if (selectedUsnFilter === 'all') {
-                     return true; // Show all tasks for the selected semester assigned TO anyone
-                 } else {
-                     // Show tasks assigned TO the specific selected user
-                     return task.usn === selectedUsnFilter; // Both should be uppercase
-                 }
-             });
-         }
-         // --- Regular Admin View: Shows tasks ASSIGNED BY this admin ---
-         else {
-             return tasks.filter(task => {
-                 // 1. Must be assigned BY the current admin
-                 if (task.assignedBy !== user.usn) { // Both should be uppercase
-                     return false;
-                 }
+                // 2. Match USN filter ('all' or specific)
+                if (selectedUsnFilter === 'all') {
+                    // Show all tasks for the selected semester
+                    return true;
+                } else {
+                    // Show tasks assigned TO the specific selected user
+                    return task.usn === selectedUsnFilter; // Both should be uppercase
+                }
+            });
 
-                 // 2. Match semester
-                 const semesterMatch = task.semester === targetSemesterValue;
-                 if (!semesterMatch) return false;
-
-                 // 3. Match USN filter ('all' or specific)
-                 if (selectedUsnFilter === 'all') {
-                     return true; // Show all tasks assigned BY this admin for this semester
-                 } else {
-                     // Show tasks assigned BY this admin TO the specific selected user
-                     return task.usn === selectedUsnFilter; // Both should be uppercase
-                 }
-             });
-         }
+         // Old logic based on assignedBy for non-master admin is removed
+         // Master admin now sees all tasks for the filter, non-master sees all tasks for the filter
+         // Specific filtering for "Tasks Created By You" happens in a separate memo below
      }
 
      return []; // Default case (shouldn't be reached)
-  }, [user, tasks, selectedSemesterFilter, selectedUsnFilter, isMasterAdmin]); // Added isMasterAdmin dependency
+  }, [user, tasks, selectedSemesterFilter, selectedUsnFilter]); // Removed isMasterAdmin dependency as logic unified
 
 
-   // Calculate task counts based on filteredTasks
-   const taskCounts = useMemo(() => {
+   // Calculate task counts based on filteredTasks for the Kanban board
+   const kanbanTaskCounts = useMemo(() => {
      const counts = {
        total: filteredTasks.length,
        [TaskStatus.ToBeStarted]: 0,
        [TaskStatus.InProgress]: 0,
-       [TaskStatus.Completed]: 0, // Added count for Completed
+       [TaskStatus.Completed]: 0,
        [TaskStatus.Submitted]: 0,
        [TaskStatus.Done]: 0,
      };
@@ -354,19 +325,20 @@ export default function DashboardPage() {
      return counts;
    }, [filteredTasks]);
 
-   // Filter for Submitted Tasks (Admin view only)
-    const submittedTasks = useMemo(() => {
-       if (!user || user.role !== 'admin' || !selectedSemesterFilter) {
-          return []; // Only show for admins with a semester selected
-       }
-        const targetSemesterValue = selectedSemesterFilter === 'N/A' ? null : parseInt(selectedSemesterFilter, 10);
+   // Filter for "Tasks Created By You" (Regular Admin view only, based on semester/USN filter)
+    const tasksCreatedByAdmin = useMemo(() => {
+        if (!user || user.role !== 'admin' || isMasterAdmin || !selectedSemesterFilter) {
+           return []; // Only show for regular admins with a semester selected
+        }
+         const targetSemesterValue = selectedSemesterFilter === 'N/A' ? null : parseInt(selectedSemesterFilter, 10);
 
-        return tasks.filter(task =>
-            task.status === TaskStatus.Submitted && // Only submitted tasks
-            task.semester === targetSemesterValue && // Match the selected semester filter
-            (isMasterAdmin || task.assignedBy === user.usn) // Master admin sees all, regular admin sees theirs
-       ).sort((a, b) => (b.submittedAt?.getTime() ?? 0) - (a.submittedAt?.getTime() ?? 0)); // Sort by submission date descending
-    }, [user, tasks, selectedSemesterFilter, isMasterAdmin]);
+         return tasks.filter(task =>
+             task.assignedBy === user.usn && // Only tasks assigned BY this admin
+             task.semester === targetSemesterValue && // Match the selected semester filter
+              // Match USN filter if not 'all'
+             (selectedUsnFilter === 'all' || task.usn === selectedUsnFilter)
+        ).sort((a, b) => b.dueDate.getTime() - a.dueDate.getTime()); // Sort by due date descending
+    }, [user, tasks, selectedSemesterFilter, selectedUsnFilter, isMasterAdmin]);
 
 
    // Handler for Refresh button
@@ -425,44 +397,7 @@ export default function DashboardPage() {
        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user, toast]); // Dependencies: user (to trigger on role change), toast (stable)
 
-   // --- Edit/Delete Handlers for Submitted Tasks Table ---
-   const handleEditTaskClick = (task: Task) => {
-      // TODO: Implement edit functionality - open a dialog pre-filled with task data
-      if (!isAdmin) return; // Should not be reachable
-       console.log("Edit task clicked (implementation needed):", task.id);
-       toast({ title: "Edit Not Implemented", description: "Editing task details is not yet available." });
-   };
-
-   const handleDeleteTaskConfirm = async (taskId: string, taskTitle: string, taskUsn: string) => {
-      if (!isAdmin) return; // Should not be reachable
-      setIsDeletingTask(taskId);
-      console.log(`Deleting task ${taskId}`);
-      try {
-          await deleteTask(taskId); // Call deleteTask from context
-          toast({
-              title: "Task Deleted",
-              description: `Task "${taskTitle}" for student ${taskUsn.toUpperCase()} has been removed.`,
-          });
-           // No need to update local state, context provider handles it and useEffect updates table
-      } catch (error: any) {
-          console.error("Failed to delete task:", error);
-          toast({
-              variant: "destructive",
-              title: "Deletion Failed",
-              description: error.message || "Could not delete the task.",
-          });
-      } finally {
-          setIsDeletingTask(null);
-      }
-   };
-
-     const handleDownloadClick = (url: string | undefined) => {
-        if (!url) return;
-        console.log(`Download requested for ${url}`);
-        window.open(url, '_blank');
-     };
-   // --- End Edit/Delete Handlers ---
-
+    // Edit/Delete/Download handlers removed from here, handled in TaskCard contextually
 
   return (
     <div className="container mx-auto p-4 pt-8">
@@ -505,7 +440,7 @@ export default function DashboardPage() {
                 <div className="flex items-center gap-2">
                    <Label htmlFor="user-filter" className="text-sm font-medium shrink-0">
                      <Filter className="inline-block h-4 w-4 mr-1 relative -top-px"/>
-                     {isMasterAdmin ? 'View User:' : 'Assign Filter:'}
+                     View User: {/* Changed label to be consistent */}
                    </Label>
                    <Select
                      value={selectedUsnFilter ?? ''}
@@ -535,7 +470,7 @@ export default function DashboardPage() {
             )}
 
 
-             {/* Create Task Button (Not for Master Admin viewing others) */}
+             {/* Create Task Button (Only for Regular Admins) */}
              {!isMasterAdmin && (
                  <Button onClick={() => setIsCreateTaskOpen(true)} className="bg-accent text-accent-foreground hover:bg-accent/90 w-full sm:w-auto ml-auto" disabled={isCreatingTask || isRefreshing}>
                    {isCreatingTask ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
@@ -559,31 +494,32 @@ export default function DashboardPage() {
          </Alert>
        )}
 
-       {/* Task Counts (only if tasks are visible) */}
+       {/* Task Counts for Kanban (only if tasks are visible) */}
         {(user?.role === 'student' || (user?.role === 'admin' && selectedSemesterFilter && selectedUsnFilter)) && !tasksLoading && (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 mb-6">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Total Tasks</CardTitle>
+                    <CardTitle className="text-sm font-medium">Visible Tasks</CardTitle> {/* Changed title */}
                     <Inbox className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{taskCounts.total}</div>
+                        <div className="text-2xl font-bold">{kanbanTaskCounts.total}</div>
                         <p className="text-xs text-muted-foreground">
                             {user.role === 'admin'
-                                ? (isMasterAdmin ? 'Tasks for selected filter' : 'Assigned by you for filter')
+                                ? 'Tasks matching current filter'
                                 : 'Your assigned tasks'
                             }
                         </p>
                     </CardContent>
                 </Card>
+                {/* Status counts based on filteredTasks */}
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">{TaskStatus.ToBeStarted}</CardTitle>
                     <ListTodo className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                    <div className="text-2xl font-bold">{taskCounts[TaskStatus.ToBeStarted]}</div>
+                    <div className="text-2xl font-bold">{kanbanTaskCounts[TaskStatus.ToBeStarted]}</div>
                     </CardContent>
                 </Card>
                  <Card>
@@ -592,7 +528,7 @@ export default function DashboardPage() {
                     <Play className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                    <div className="text-2xl font-bold">{taskCounts[TaskStatus.InProgress]}</div>
+                    <div className="text-2xl font-bold">{kanbanTaskCounts[TaskStatus.InProgress]}</div>
                     </CardContent>
                 </Card>
                 <Card>
@@ -601,7 +537,7 @@ export default function DashboardPage() {
                     <Check className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                    <div className="text-2xl font-bold">{taskCounts[TaskStatus.Submitted]}</div>
+                    <div className="text-2xl font-bold">{kanbanTaskCounts[TaskStatus.Submitted]}</div>
                     </CardContent>
                 </Card>
                 <Card>
@@ -610,7 +546,7 @@ export default function DashboardPage() {
                     <CheckCheck className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                    <div className="text-2xl font-bold">{taskCounts[TaskStatus.Done]}</div>
+                    <div className="text-2xl font-bold">{kanbanTaskCounts[TaskStatus.Done]}</div>
                     </CardContent>
                 </Card>
             </div>
@@ -646,10 +582,7 @@ export default function DashboardPage() {
                <BookCopy className="h-12 w-12 text-muted-foreground mb-4" />
               <p className="text-lg font-medium text-muted-foreground">Select a semester</p>
               <p className="text-sm text-muted-foreground">
-                 {isMasterAdmin
-                    ? "Choose a semester (or N/A) to view tasks."
-                    : "Choose a semester (or N/A) to view tasks assigned by you."
-                 }
+                 Choose a semester (or N/A) to view tasks.
               </p>
             </div>
           )}
@@ -660,10 +593,7 @@ export default function DashboardPage() {
                <Filter className="h-12 w-12 text-muted-foreground mb-4" />
                <p className="text-lg font-medium text-muted-foreground">Select a user filter</p>
                 <p className="text-sm text-muted-foreground">
-                    {isMasterAdmin
-                        ? `Choose 'All Users' or a specific user to view their tasks for ${selectedSemesterFilter === 'N/A' ? 'N/A' : `Semester ${selectedSemesterFilter}`}.`
-                        : `Choose 'All Users' or a specific user to view tasks assigned by you for ${selectedSemesterFilter === 'N/A' ? 'N/A' : `Semester ${selectedSemesterFilter}`}.`
-                    }
+                    Choose 'All Users' or a specific user to view their tasks for {selectedSemesterFilter === 'N/A' ? 'N/A' : `Semester ${selectedSemesterFilter}`}.
                 </p>
              </div>
            )}
@@ -671,13 +601,13 @@ export default function DashboardPage() {
            {/* Show Kanban board if student OR if admin has selected semester AND (usn or 'all') */}
            {(user?.role === 'student' || (user?.role === 'admin' && selectedSemesterFilter && selectedUsnFilter)) && (
              <KanbanBoard
-                 tasks={filteredTasks} // Already filtered based on role/filters
+                 tasks={filteredTasks} // Filtered for the board view
                  isAdmin={user.role === 'admin'}
              />
            )}
 
            {/* Message if filters selected but no tasks found for Kanban */}
-            {user?.role === 'admin' && selectedSemesterFilter && selectedUsnFilter && filteredTasks.length === 0 && submittedTasks.length === 0 && (
+            {user?.role === 'admin' && selectedSemesterFilter && selectedUsnFilter && filteredTasks.length === 0 && tasksCreatedByAdmin.length === 0 && (
               <div className="flex flex-col items-center justify-center h-[calc(100vh-350px)] text-center"> {/* Adjusted height */}
                    <Columns className="h-12 w-12 text-muted-foreground mb-4" />
                   <p className="text-lg font-medium text-muted-foreground">No tasks found</p>
@@ -697,111 +627,41 @@ export default function DashboardPage() {
             )}
 
 
-            {/* --- Submitted Tasks Table (Admin Only) --- */}
-             {user?.role === 'admin' && selectedSemesterFilter && submittedTasks.length > 0 && (
+            {/* --- Tasks Created By You Table (Regular Admin Only) --- */}
+             {user?.role === 'admin' && !isMasterAdmin && selectedSemesterFilter && tasksCreatedByAdmin.length > 0 && (
                  <div className="mt-12"> {/* Add margin top */}
-                     <h2 className="text-xl font-semibold text-primary mb-4">Submitted Tasks ({submittedTasks.length})</h2>
+                     <h2 className="text-xl font-semibold text-primary mb-4 flex items-center">
+                        <History className="mr-2 h-5 w-5" /> Tasks Created By You ({tasksCreatedByAdmin.length})
+                     </h2>
+                     <p className="text-sm text-muted-foreground mb-4">
+                        Showing tasks you assigned matching the filter: Semester {selectedSemesterFilter === 'N/A' ? 'N/A' : selectedSemesterFilter}, User {selectedUsnFilter ?? 'All'}.
+                     </p>
                      <div className="border rounded-lg overflow-hidden">
                          <Table>
                              <TableHeader>
                                  <TableRow>
                                      <TableHead>Task Title</TableHead>
-                                     <TableHead>Student USN</TableHead>
-                                     <TableHead>Submitted At</TableHead>
-                                     <TableHead className="text-right">Actions</TableHead>
+                                     <TableHead>Assigned To (USN)</TableHead>
+                                     <TableHead>Current Status</TableHead>
+                                     <TableHead>Due Date</TableHead>
+                                     {/* Remove Actions column for simplicity here */}
+                                     {/* <TableHead className="text-right">Actions</TableHead> */}
                                  </TableRow>
                              </TableHeader>
                              <TableBody>
-                                 {submittedTasks.map((task) => (
-                                     <TableRow key={task.id} className={isDeletingTask === task.id ? 'opacity-50' : ''}>
+                                 {tasksCreatedByAdmin.map((task) => (
+                                     <TableRow key={task.id}>
                                          <TableCell className="font-medium">{task.title}</TableCell>
                                          <TableCell>{task.usn}</TableCell>
+                                         <TableCell>{task.status}</TableCell>
                                          <TableCell>
-                                             {task.submittedAt ? format(task.submittedAt, 'PPp') : 'N/A'}
+                                             {format(task.dueDate, 'PP')} {/* Format date */}
                                          </TableCell>
-                                         <TableCell className="text-right space-x-1">
-                                            {/* Download Submission Button */}
-                                             {task.submissionUrl && (
-                                                  <TooltipProvider>
-                                                      <Tooltip>
-                                                          <TooltipTrigger asChild>
-                                                               <Button
-                                                                    variant="ghost"
-                                                                    size="icon"
-                                                                    className="h-8 w-8 text-green-600 hover:text-green-700"
-                                                                    onClick={() => handleDownloadClick(task.submissionUrl)}
-                                                                    disabled={!!isDeletingTask}
-                                                                >
-                                                                    <Download className="h-4 w-4" />
-                                                               </Button>
-                                                           </TooltipTrigger>
-                                                           <TooltipContent side="left">
-                                                               <p>Download Submission</p>
-                                                           </TooltipContent>
-                                                      </Tooltip>
-                                                  </TooltipProvider>
-                                             )}
-                                             {/* Edit Task Button */}
-                                              <TooltipProvider>
-                                                  <Tooltip>
-                                                      <TooltipTrigger asChild>
-                                                         <Button
-                                                             variant="ghost"
-                                                             size="icon"
-                                                             className="h-8 w-8 text-muted-foreground hover:text-primary"
-                                                             onClick={() => handleEditTaskClick(task)}
-                                                             disabled={!!isDeletingTask}
-                                                         >
-                                                             <Edit className="h-4 w-4" />
-                                                         </Button>
-                                                      </TooltipTrigger>
-                                                      <TooltipContent side="left">
-                                                          <p>Edit Task (Not Implemented)</p>
-                                                      </TooltipContent>
-                                                  </Tooltip>
-                                              </TooltipProvider>
-                                              {/* Delete Task Button */}
-                                              <AlertDialog>
-                                                  <TooltipProvider>
-                                                      <Tooltip>
-                                                          <TooltipTrigger asChild>
-                                                              <AlertDialogTrigger asChild>
-                                                                  <Button
-                                                                      variant="ghost"
-                                                                      size="icon"
-                                                                      className="h-8 w-8 text-destructive/80 hover:text-destructive"
-                                                                      disabled={!!isDeletingTask}
-                                                                  >
-                                                                      {isDeletingTask === task.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <Trash2 className="h-4 w-4" />}
-                                                                  </Button>
-                                                              </AlertDialogTrigger>
-                                                          </TooltipTrigger>
-                                                           <TooltipContent side="left">
-                                                               <p>Delete Task</p>
-                                                           </TooltipContent>
-                                                      </Tooltip>
-                                                  </TooltipProvider>
-                                                  <AlertDialogContent>
-                                                      <AlertDialogHeader>
-                                                          <AlertDialogTitle>Delete Task "{task.title}"?</AlertDialogTitle>
-                                                          <AlertDialogDescription>
-                                                              This action cannot be undone. This will permanently delete this specific task instance for student <span className="font-semibold">{task.usn}</span>. Are you sure?
-                                                          </AlertDialogDescription>
-                                                      </AlertDialogHeader>
-                                                      <AlertDialogFooter>
-                                                          <AlertDialogCancel disabled={!!isDeletingTask}>Cancel</AlertDialogCancel>
-                                                          <AlertDialogAction
-                                                              onClick={() => handleDeleteTaskConfirm(task.id, task.title, task.usn)}
-                                                              disabled={!!isDeletingTask}
-                                                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                                          >
-                                                              {isDeletingTask === task.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                                              Yes, Delete Task
-                                                          </AlertDialogAction>
-                                                      </AlertDialogFooter>
-                                                  </AlertDialogContent>
-                                              </AlertDialog>
-                                         </TableCell>
+                                         {/* Remove Actions Cell */}
+                                          {/* <TableCell className="text-right space-x-1">
+                                             <Button variant="ghost" size="icon" disabled> <Edit className="h-4 w-4" /> </Button>
+                                             <Button variant="ghost" size="icon" disabled> <Trash2 className="h-4 w-4" /> </Button>
+                                         </TableCell> */}
                                      </TableRow>
                                  ))}
                              </TableBody>
@@ -810,13 +670,13 @@ export default function DashboardPage() {
                  </div>
              )}
 
-              {/* Message if filters selected, Kanban tasks exist, but NO submitted tasks */}
-              {user?.role === 'admin' && selectedSemesterFilter && filteredTasks.length > 0 && submittedTasks.length === 0 && (
+              {/* Message if filters selected, Kanban tasks might exist, but NO tasks created by this admin match filter */}
+              {user?.role === 'admin' && !isMasterAdmin && selectedSemesterFilter && filteredTasks.length > 0 && tasksCreatedByAdmin.length === 0 && (
                  <div className="mt-12 p-6 text-center text-muted-foreground border rounded-lg">
-                    No tasks have been submitted for the current filter yet.
+                    You have not created any tasks that match the current filter criteria.
                  </div>
               )}
-             {/* --- End Submitted Tasks Table --- */}
+             {/* --- End Tasks Created By You Table --- */}
 
         </>
       )}

@@ -15,17 +15,7 @@ import {
 } from "@/components/ui/tooltip"
 import { useAuth } from '@/hooks/use-auth'; // Import useAuth
 import { useToast } from '@/hooks/use-toast'; // Import useToast
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"; // Import AlertDialog components
+// Removed AlertDialog imports as they are no longer used directly here
 import { cn } from '@/lib/utils'; // Import the cn utility function
 import { format } from 'date-fns'; // Import format for submittedAt date
 
@@ -39,7 +29,7 @@ interface TaskCardProps {
 
 export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
     const [isExpanded, setIsExpanded] = useState(false);
-    const [isDeleting, setIsDeleting] = useState(false); // State for delete loading
+    // Removed isDeleting state as delete button logic is simplified/moved
     const [isUploading, setIsUploading] = useState(false); // State for upload loading
     const dueDateColor = getDueDateColor(task.dueDate);
     const { updateTask, deleteTask, isMasterAdmin } = useAuth(); // Get context functions and master admin status
@@ -113,33 +103,10 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
       });
     };
 
-     const handleDeleteConfirm = async () => {
-        // Only allow delete if current user is the admin who assigned the task OR the master admin
-        // This check should ideally happen in the context function, but we can prevent UI trigger here too
-        if (!isAdmin) return; // Should not happen if button is hidden, but good practice
-        setIsDeleting(true);
-        console.log(`Deleting task ${task.id}`);
-        try {
-            await deleteTask(task.id); // Call deleteTask from context (context should handle permission)
-            toast({
-                title: "Task Deleted",
-                description: `Task "${task.title}" has been removed.`,
-            });
-            // No need to update local state, context provider handles it
-        } catch (error: any) {
-            console.error("Failed to delete task:", error);
-            toast({
-                variant: "destructive",
-                title: "Deletion Failed",
-                description: error.message || "Could not delete the task.",
-            });
-        } finally {
-            setIsDeleting(false);
-        }
-    };
+    // handleDeleteConfirm removed, delete logic is simplified or handled elsewhere now
 
   return (
-    <Draggable draggableId={task.id} index={index} isDragDisabled={!isDraggable || isDeleting || isUploading}>
+    <Draggable draggableId={task.id} index={index} isDragDisabled={!isDraggable || isUploading}>
       {(provided, snapshot) => (
         <Card
           ref={provided.innerRef}
@@ -149,9 +116,9 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
             "bg-card shadow-md hover:shadow-lg transition-shadow",
              snapshot.isDragging ? 'ring-2 ring-primary' : '',
              !isDraggable ? 'opacity-80 cursor-not-allowed' : '',
-             isDeleting ? 'opacity-50 animate-pulse' : '' // Visual feedback for deleting
+             // Removed isDeleting style
           )}
-          aria-busy={isDeleting || isUploading}
+          aria-busy={isUploading} // Removed isDeleting
         >
           <CardHeader className="p-3 pb-2">
             <CardTitle
@@ -285,7 +252,7 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger asChild>
-                               <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={() => handleDownloadClick(task.attachmentUrl)} disabled={isDeleting || isUploading}>
+                               <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={() => handleDownloadClick(task.attachmentUrl)} disabled={isUploading}>
                                     <Paperclip className="h-4 w-4" />
                                 </Button>
                             </TooltipTrigger>
@@ -300,7 +267,7 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
                      <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:text-green-700" onClick={() => handleDownloadClick(task.submissionUrl)} disabled={isDeleting || isUploading}>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:text-green-700" onClick={() => handleDownloadClick(task.submissionUrl)} disabled={isUploading}>
                                     <Download className="h-4 w-4" />
                                 </Button>
                              </TooltipTrigger>
@@ -312,13 +279,13 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
                  )}
             </div>
 
-             {/* Admin Actions (Regular and Master) */}
+             {/* Admin Actions (Regular and Master) - Simplified for Kanban Card */}
             {isAdmin && (
                 <div className="flex space-x-1">
                      <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={handleEditClick} disabled={isDeleting || isUploading}>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={handleEditClick} disabled={isUploading}>
                                     <Edit className="h-4 w-4" />
                                 </Button>
                              </TooltipTrigger>
@@ -328,46 +295,33 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
                         </Tooltip>
                     </TooltipProvider>
 
-                    {/* Delete Button with Confirmation (Visible to Master Admin and the Admin who assigned it) */}
-                    {/* Logic to show delete button might need refinement based on exact permission rules */}
-                    {/* Assuming for now deleteTask context handles permissions, show if isAdmin */}
-                     <AlertDialog>
-                         <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                     <AlertDialogTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive/80 hover:text-destructive" disabled={isDeleting || isUploading}>
-                                            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin"/> : <Trash2 className="h-4 w-4" />}
-                                        </Button>
-                                     </AlertDialogTrigger>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    <p>Delete Task</p>
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
-                        <AlertDialogContent>
-                            <AlertDialogHeader>
-                            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                                 {/* Ensure USN is uppercase */}
-                                This action cannot be undone. This will permanently delete the task
-                                "{task.title}" for student {task.usn.toUpperCase()}.
-                            </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-                            <AlertDialogAction
-                                onClick={handleDeleteConfirm}
-                                disabled={isDeleting}
-                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                            >
-                                {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                Delete
-                            </AlertDialogAction>
-                            </AlertDialogFooter>
-                        </AlertDialogContent>
-                    </AlertDialog>
+                    {/* Simplified Delete Button - Triggering context directly */}
+                    {/* Consider if delete should even be on the Kanban card or only in a dedicated list/manage view */}
+                    {/* <AlertDialog> ... </AlertDialog> removed */}
+                    {/* Simple delete icon button - consider adding confirmation elsewhere if needed */}
+                     <TooltipProvider>
+                         <Tooltip>
+                             <TooltipTrigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 text-destructive/80 hover:text-destructive"
+                                    onClick={() => {
+                                        // Add confirmation here if desired, or rely on context/manage page for safe delete
+                                        toast({ title: "Deletion from card disabled.", description: "Use manage section if available."});
+                                        // Example: Trigger delete directly (use with caution on card):
+                                        // deleteTask(task.id).catch(err => toast({ variant: "destructive", title: "Delete Failed", description: err.message }));
+                                    }}
+                                    disabled={isUploading} // Only disable during upload
+                                >
+                                   <Trash2 className="h-4 w-4" />
+                                </Button>
+                             </TooltipTrigger>
+                             <TooltipContent>
+                                 <p>Delete Task (Disabled on card)</p>
+                             </TooltipContent>
+                         </Tooltip>
+                     </TooltipProvider>
                 </div>
             )}
           </CardFooter>
