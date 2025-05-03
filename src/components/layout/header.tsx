@@ -13,13 +13,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useAuth } from '@/hooks/use-auth';
+import { useAuth } from '@/hooks/use-auth'; // Import useAuth
 import { LogOut, User as UserIcon, Users, ChevronsUpDown } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { ThemeToggle } from '@/components/theme/theme-toggle'; // Import ThemeToggle
 
 export function Header() {
-  const { user, loading, logout } = useAuth();
+  const { user, loading, logout, isMasterAdmin } = useAuth(); // Get isMasterAdmin from useAuth
   const router = useRouter();
 
   const handleLogout = () => {
@@ -117,7 +117,7 @@ export function Header() {
                       <p className="text-xs leading-none text-muted-foreground">
                          {/* Display N/A if semester is null */}
                          {user.role === 'admin'
-                            ? `${isMasterAdmin ? 'Master Admin' : 'Admin'}${user.semester !== null ? ` - Sem ${user.semester}` : ''}`
+                            ? `${isMasterAdmin ? 'Master Admin' : 'Admin'}${user.semester !== null ? ` - Sem ${user.semester}` : ''}` // Use isMasterAdmin here
                             : `Student - Sem ${user.semester === null ? 'N/A' : user.semester}`
                          }
                       </p>
