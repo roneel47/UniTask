@@ -11,7 +11,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
-import { AlertCircle, Loader2, Filter, BookCopy } from 'lucide-react'; // Added Filter, BookCopy
+import { AlertCircle, Loader2, Filter, BookCopy, ArrowUpCircle } from 'lucide-react'; // Added Filter, BookCopy, ArrowUpCircle
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Select,
@@ -20,18 +20,29 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"; // Added Select
-
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"; // Added AlertDialog
 
 // Define semester options
 const semesterOptions = ['all', ...Array.from({ length: 8 }, (_, i) => String(i + 1))];
 
 export default function ManageUsersPage() {
-  const { user, loading, logout, getAllUsers, updateUserRole } = useAuth();
+  const { user, loading, getAllUsers, updateUserRole, promoteSemesters } = useAuth(); // Added promoteSemesters
   const router = useRouter();
   const [allUsers, setAllUsers] = useState<User[]>([]); // Store all fetched users
   const [filteredUsers, setFilteredUsers] = useState<User[]>([]); // Users to display in the table
   const [isDataLoading, setIsDataLoading] = useState(true);
   const [updatingUsers, setUpdatingUsers] = useState<Record<string, boolean>>({}); // Track loading state per user
+  const [isPromoting, setIsPromoting] = useState(false); // State for promotion loading
   const { toast } = useToast();
   const [error, setError] = useState<string | null>(null);
   const [selectedSemesterFilter, setSelectedSemesterFilter] = useState<string>('all'); // Default to 'all'
@@ -67,7 +78,7 @@ export default function ManageUsersPage() {
       setError(null);
       try {
         const userList = await getAllUsers();
-        // Ensure users are sorted (e.g., by USN or semester) for consistent display
+        // Ensure users are sorted (e.g., by semester then USN) for consistent display
         userList.sort((a, b) => (a.semester - b.semester) || a.usn.localeCompare(b.usn));
         setAllUsers(userList); // Store all users
         // setFilteredUsers(userList); // Initial display (will be updated by useEffect)
@@ -101,8 +112,9 @@ export default function ManageUsersPage() {
        const updateList = (list: User[]) => list.map(u =>
             u.usn === targetUser.usn ? { ...u, role: newRole } : u
        );
-      setAllUsers(prev => updateList(prev));
-      // setFilteredUsers(prev => updateList(prev)); // This will be handled by the useEffect dependency on allUsers
+      setAllUsers(prev => updateList(prev)); // Update allUsers triggers useEffect for filteredUsers
+      // Re-sort after update
+      setAllUsers(prev => [...prev].sort((a, b) => (a.semester - b.semester) || a.usn.localeCompare(b.usn)));
 
       toast({
         title: "Success",
@@ -120,21 +132,49 @@ export default function ManageUsersPage() {
           u.usn === targetUser.usn ? { ...u, role: targetUser.role } : u // Revert to original role
        );
        setAllUsers(prev => revertList(prev));
-       // setFilteredUsers(prev => revertList(prev)); // Handled by useEffect
+        // Re-sort after revert
+       setAllUsers(prev => [...prev].sort((a, b) => (a.semester - b.semester) || a.usn.localeCompare(b.usn)));
+
     } finally {
       setUpdatingUsers(prev => ({ ...prev, [targetUser.usn]: false }));
     }
   };
+
+  const handlePromoteSemesters = async () => {
+    setIsPromoting(true);
+    try {
+      const { promotedCount, maxSemesterCount } = await promoteSemesters();
+      await fetchUsers(); // Re-fetch users to reflect changes
+      toast({
+        title: "Semesters Promoted",
+        description: `${promotedCount} student(s) moved to the next semester. ${maxSemesterCount} student(s) remained in Semester 8.`,
+      });
+    } catch (err: any) {
+      console.error("Failed to promote semesters:", err);
+      toast({
+        variant: "destructive",
+        title: "Promotion Failed",
+        description: err.message || "Could not promote semesters.",
+      });
+    } finally {
+      setIsPromoting(false);
+    }
+  };
+
 
   if (loading || !user) {
     // Show loading skeleton or redirect handled by useEffect
      return (
        <div className="container mx-auto p-4 pt-8">
          <Skeleton className="h-8 w-48 mb-6 bg-muted" />
-          {/* Skeleton for filter */}
-         <div className="mb-4 flex items-center gap-2">
-            <Skeleton className="h-5 w-20 bg-muted" />
-            <Skeleton className="h-10 w-32 bg-muted" />
+         <div className="mb-4 flex justify-between items-center gap-2">
+            {/* Skeleton for filter */}
+            <div className="flex items-center gap-2">
+                <Skeleton className="h-5 w-20 bg-muted" />
+                <Skeleton className="h-10 w-32 bg-muted" />
+            </div>
+            {/* Skeleton for Promote button */}
+             <Skeleton className="h-10 w-40 bg-muted" />
          </div>
          <div className="border rounded-lg">
            <Table>
@@ -176,29 +216,60 @@ export default function ManageUsersPage() {
     <div className="container mx-auto p-4 pt-8">
       <div className="flex flex-col md:flex-row justify-between md:items-center mb-6 gap-4">
           <h1 className="text-2xl font-semibold text-primary">Manage Users</h1>
-          {/* Semester Filter */}
-           <div className="flex items-center gap-2">
-               <Label htmlFor="semester-filter" className="text-sm font-medium shrink-0">
-                 <Filter className="inline-block h-4 w-4 mr-1 relative -top-px"/>
-                 Filter by Semester:
-               </Label>
-               <Select
-                 value={selectedSemesterFilter}
-                 onValueChange={setSelectedSemesterFilter}
-                 disabled={isDataLoading}
-               >
-                 <SelectTrigger id="semester-filter" className="w-full sm:w-[180px]">
-                   <SelectValue placeholder="Select Semester" />
-                 </SelectTrigger>
-                 <SelectContent>
-                   {semesterOptions.map(sem => (
-                     <SelectItem key={sem} value={sem}>
-                       {sem === 'all' ? 'All Semesters' : `Semester ${sem}`}
-                     </SelectItem>
-                   ))}
-                 </SelectContent>
-               </Select>
-           </div>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 flex-wrap">
+             {/* Promote Semesters Button */}
+                <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button variant="outline" disabled={isPromoting || isDataLoading}>
+                            {isPromoting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowUpCircle className="mr-2 h-4 w-4" />}
+                            Promote Semesters
+                        </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                        <AlertDialogTitle>Promote All Student Semesters?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will increment the semester for all students currently in semesters 1 through 7. Students in semester 8 will remain in semester 8. This action cannot be easily undone. Are you sure?
+                        </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isPromoting}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handlePromoteSemesters}
+                            disabled={isPromoting}
+                            className="bg-primary text-primary-foreground hover:bg-primary/90"
+                        >
+                            {isPromoting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Yes, Promote Semesters
+                        </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+
+              {/* Semester Filter */}
+               <div className="flex items-center gap-2">
+                   <Label htmlFor="semester-filter" className="text-sm font-medium shrink-0">
+                     <Filter className="inline-block h-4 w-4 mr-1 relative -top-px"/>
+                     Filter by Semester:
+                   </Label>
+                   <Select
+                     value={selectedSemesterFilter}
+                     onValueChange={setSelectedSemesterFilter}
+                     disabled={isDataLoading || isPromoting}
+                   >
+                     <SelectTrigger id="semester-filter" className="w-full sm:w-[180px]">
+                       <SelectValue placeholder="Select Semester" />
+                     </SelectTrigger>
+                     <SelectContent>
+                       {semesterOptions.map(sem => (
+                         <SelectItem key={sem} value={sem}>
+                           {sem === 'all' ? 'All Semesters' : `Semester ${sem}`}
+                         </SelectItem>
+                       ))}
+                     </SelectContent>
+                   </Select>
+               </div>
+          </div>
        </div>
 
 
@@ -261,7 +332,7 @@ export default function ManageUsersPage() {
                               handleRoleChange(targetUser, checked ? 'admin' : 'student')
                             }
                             // Admin cannot change own role. Also disable if data is loading or this user is being updated.
-                            disabled={loading || updatingUsers[targetUser.usn] || user.usn === targetUser.usn}
+                            disabled={loading || updatingUsers[targetUser.usn] || isPromoting || user.usn === targetUser.usn}
                             aria-label={`Set ${targetUser.usn} as admin`}
                          />
                          <Label htmlFor={`admin-switch-${targetUser.usn}`} className="sr-only">

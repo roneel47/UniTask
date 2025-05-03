@@ -18,6 +18,7 @@ export const useAuth = () => {
     register, // Now expects (usn, semester, password)
     updateUserRole,
     getAllUsers,
+    promoteSemesters, // Include promoteSemesters
     tasks,
     tasksLoading,
     updateTask,
@@ -34,6 +35,7 @@ export const useAuth = () => {
     register,
     updateUserRole,
     getAllUsers,
+    promoteSemesters, // Return promoteSemesters
     tasks,
     tasksLoading,
     updateTask,

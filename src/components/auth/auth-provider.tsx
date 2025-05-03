@@ -16,6 +16,7 @@ interface AuthContextType {
   register: (usn: string, semester: number, password?: string) => Promise<void>; // Added semester
   updateUserRole: (usn: string, role: 'student' | 'admin') => Promise<void>;
   getAllUsers: () => Promise<User[]>;
+  promoteSemesters: () => Promise<{ promotedCount: number; maxSemesterCount: number }>; // Function to promote semesters
   updateTask: (taskId: string, updates: Partial<Task>) => Promise<void>; // Function to update a task
   addTask: (newTask: Task) => Promise<void>; // Function to add a task
   addMultipleTasks: (newTasks: Task[]) => Promise<void>; // Function to add multiple tasks
@@ -47,11 +48,11 @@ const initialMockTasks: Task[] = [
  { id: '1-1RG22CS002', title: '6th Sem Project Proposal', description: 'Finalize and submit the project proposal document.', dueDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000), status: TaskStatus.ToBeStarted, assignedBy: '1RG22CS001', usn: '1RG22CS002', semester: 6 },
   { id: '2-1RG22CS003', title: '6th Sem Study for Midterm', description: 'Review chapters 1-5 for the upcoming exam.', dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000), status: TaskStatus.InProgress, assignedBy: '1RG22CS001', usn: '1RG22CS003', semester: 6 },
   { id: '3-1RG23CS050', title: '4th Sem Lab Assignment 3', description: 'Implement the algorithm described in the lab manual.', dueDate: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000), status: TaskStatus.Completed, assignedBy: 'TEACHER001', usn: '1RG23CS050', semester: 4 },
-   { id: '4-1RG23CS051', title: '4th Sem Prepare Presentation', description: 'Create slides for the group presentation.', dueDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000), status: TaskStatus.Submitted, assignedBy: 'TEACHER001', usn: '1RG23CS051', semester: 4, submittedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) },
+   { id: '4-1RG23CS051', title: '4th Sem Prepare Presentation', description: 'Create slides for the group presentation.', dueDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000), status: TaskStatus.Submitted, assignedBy: 'TEACHER001', usn: '1RG23CS051', semester: 4, submissionUrl: 'https://example.com/submissions/4-1RG23CS051/presentation.pptx', submittedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) },
    { id: '5-1RG24CS100', title: '2nd Sem Read Research Paper', description: 'Analyze the assigned research paper.', dueDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000), status: TaskStatus.Done, assignedBy: 'TEACHER001', usn: '1RG24CS100', semester: 2, completedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000) },
    { id: '6-1RG21CS200', title: '8th Sem Code Review', description: 'Participate in the peer code review.', dueDate: new Date(Date.now() + 3 * 60 * 60 * 1000), status: TaskStatus.ToBeStarted, assignedBy: '1RG22CS001', usn: '1RG21CS200', semester: 8 },
-   // Task assigned to 'all' students of a specific semester
-   { id: 'all-sem6-task1', title: 'All 6th Sem: Ethics Quiz', description: 'Complete the online ethics quiz.', dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), status: TaskStatus.ToBeStarted, assignedBy: '1RG22CS001', usn: 'all', semester: 6 },
+   // Task assigned to 'all' students of a specific semester (example task, won't show on student board directly)
+   // { id: 'all-sem6-task1', title: 'All 6th Sem: Ethics Quiz', description: 'Complete the online ethics quiz.', dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), status: TaskStatus.ToBeStarted, assignedBy: '1RG22CS001', usn: 'all', semester: 6 },
 ];
 
 
@@ -178,6 +179,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
     };
     loadInitialData();
+     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Helper function to save mock users to localStorage (removes passwords)
@@ -205,7 +207,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     // Simplified password check for demo (checking against runtime state which has passwords)
-    if (foundUser.password === password) {
+    // Allow login without password if none is set (useful for initial setup/testing)
+    if (!foundUser.password || foundUser.password === password) {
       const { password: _, ...userToStore } = foundUser;
       setUser(userToStore); // Update runtime user state
       localStorage.setItem('uniTaskUser', JSON.stringify(userToStore)); // Save user session (without password)
@@ -291,6 +294,46 @@ export function AuthProvider({ children }: AuthProviderProps) {
      // Return users without passwords from the runtime state
      return mockUsers.map(({ password, ...userWithoutPassword }) => userWithoutPassword);
   }
+
+  const promoteSemesters = async (): Promise<{ promotedCount: number; maxSemesterCount: number }> => {
+    if (user?.role !== 'admin') {
+      throw new Error("Permission denied. Only administrators can promote semesters.");
+    }
+
+    setLoading(true);
+    await new Promise(resolve => setTimeout(resolve, 500)); // Simulate delay
+
+    let promotedCount = 0;
+    let maxSemesterCount = 0;
+
+    const updatedUsers = mockUsers.map(u => {
+      if (u.role === 'student' && u.semester < 8) {
+        promotedCount++;
+        return { ...u, semester: u.semester + 1 };
+      } else if (u.role === 'student' && u.semester === 8) {
+        maxSemesterCount++;
+        return u; // Keep semester 8 students as they are
+      }
+      return u; // Keep admins and others unchanged
+    });
+
+    saveMockUsers(updatedUsers); // Save the updated user list
+
+     // If the current logged-in user is a student who got promoted, update their session
+    if (user && user.role === 'student' && user.semester < 8) {
+        const updatedLoggedInUser = updatedUsers.find(u => u.usn === user.usn);
+        if (updatedLoggedInUser) {
+            const { password: _, ...userToStore } = updatedLoggedInUser;
+            setUser(userToStore); // Update runtime user state
+            localStorage.setItem('uniTaskUser', JSON.stringify(userToStore)); // Update session storage
+        }
+    }
+
+
+    setLoading(false);
+    return { promotedCount, maxSemesterCount };
+  };
+
 
   const logout = () => {
     setLoading(true);
@@ -428,6 +471,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     register,
     updateUserRole,
     getAllUsers,
+    promoteSemesters, // Expose the new function
     updateTask,
     addTask,
     addMultipleTasks,
