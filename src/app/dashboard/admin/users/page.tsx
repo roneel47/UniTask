@@ -432,7 +432,7 @@ export default function ManageUsersPage() {
                   {isMasterAdmin && (
                     <TableCell className="text-right">
                        {/* Don't show delete button for the master admin themselves */}
-                      {targetUser.usn !== MASTER_ADMIN_USN && (
+                      {targetUser.usn !== MASTER_ADMIN_USN ? (
                         <AlertDialog>
                           <TooltipProvider>
                               <Tooltip>
@@ -473,22 +473,21 @@ export default function ManageUsersPage() {
                               </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>
+                      ) : (
+                       /* Show a placeholder or icon if it's the master admin row */
+                          <TooltipProvider>
+                              <Tooltip>
+                                  <TooltipTrigger asChild>
+                                      <span className="inline-block h-8 w-8 pt-1.5 text-center text-muted-foreground">
+                                          <UserX className="h-4 w-4 inline-block"/>
+                                      </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                      <p>Master admin cannot be deleted.</p>
+                                  </TooltipContent>
+                              </Tooltip>
+                          </TooltipProvider>
                       )}
-                       {/* Show a placeholder or icon if it's the master admin row */}
-                       {targetUser.usn === MASTER_ADMIN_USN && (
-                            <TooltipProvider>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <span className="inline-block h-8 w-8 pt-1.5 text-center text-muted-foreground">
-                                            <UserX className="h-4 w-4 inline-block"/>
-                                        </span>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                        <p>Master admin cannot be deleted.</p>
-                                    </TooltipContent>
-                                </Tooltip>
-                            </TooltipProvider>
-                       )}
                     </TableCell>
                   )}
                 </TableRow>
@@ -505,5 +504,3 @@ export default function ManageUsersPage() {
     </div>
   );
 }
-
-    
