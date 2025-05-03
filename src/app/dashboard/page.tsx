@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -120,7 +121,8 @@ export default function DashboardPage() {
      setAssignmentError(null);
      console.log("Creating new task with data:", newTaskData);
 
-     const { title, description, dueDate, assignTo, semester } = newTaskData;
+     // Correctly destructure 'usn' which holds the 'all' or specific USN input from the dialog
+     const { title, description, dueDate, usn: usnInput, semester } = newTaskData;
 
      if (!semester || semester < 1 || semester > 8) {
        setAssignmentError("Invalid semester selected.");
@@ -128,10 +130,17 @@ export default function DashboardPage() {
        return Promise.reject("Invalid semester selected."); // Return rejected promise
      }
 
+     // Check if usnInput is defined before trimming
+     if (usnInput === undefined || usnInput === null) {
+         setAssignmentError("Assignment target (USN or 'all') is missing.");
+         setIsCreatingTask(false);
+         return Promise.reject("Assignment target is missing.");
+     }
+
      try {
          let targetUsns: string[] = [];
          const semesterNumber = semester; // Already a number
-         const assignToInput = assignTo.trim(); // Trim whitespace
+         const assignmentTarget = usnInput.trim(); // Use the correctly destructured variable
 
          // Fetch users of the target semester if studentList is empty (fallback)
          const currentStudentList = studentList.length > 0 ? studentList : await getAllUsers();
@@ -142,7 +151,7 @@ export default function DashboardPage() {
              (u) => u.role === 'student' && u.semester === semesterNumber
          );
 
-         if (assignToInput.toLowerCase() === 'all') {
+         if (assignmentTarget.toLowerCase() === 'all') {
              targetUsns = studentsInSemester.map(u => u.usn); // Already uppercase
              if (targetUsns.length === 0) {
                  setAssignmentError(`No students found in semester ${semesterNumber}.`);
@@ -150,26 +159,26 @@ export default function DashboardPage() {
                  return Promise.reject(`No students found in semester ${semesterNumber}.`); // Return rejected promise
              }
          } else {
-             const usnUpper = assignToInput.toUpperCase(); // Ensure input USN is uppercase
+             const targetUsnUpper = assignmentTarget.toUpperCase(); // Ensure input USN is uppercase
              // Validate USN exists *within the target semester*
-             const targetStudent = studentsInSemester.find(u => u.usn === usnUpper);
+             const targetStudent = studentsInSemester.find(u => u.usn === targetUsnUpper);
              if (!targetStudent) {
-                setAssignmentError(`Student with USN ${usnUpper} not found in semester ${semesterNumber}.`);
+                setAssignmentError(`Student with USN ${targetUsnUpper} not found in semester ${semesterNumber}.`);
                 setIsCreatingTask(false);
                 return Promise.reject(`Student not found in semester ${semesterNumber}.`); // Return rejected promise
              }
-             targetUsns = [usnUpper]; // Already uppercase
+             targetUsns = [targetUsnUpper]; // Already uppercase
          }
 
          const taskIdBase = String(Date.now());
-         const tasksToAdd: Task[] = targetUsns.map(usn => ({
-            id: `${taskIdBase}-${usn}`, // Ensure unique ID per student task instance
+         const tasksToAdd: Task[] = targetUsns.map(assignedUsn => ({
+            id: `${taskIdBase}-${assignedUsn}`, // Ensure unique ID per student task instance
             title: title,
             description: description,
             dueDate: dueDate,
             status: TaskStatus.ToBeStarted,
             assignedBy: user.usn, // Already uppercase from context
-            usn: usn, // Already uppercase
+            usn: assignedUsn, // Already uppercase
             semester: semesterNumber, // Add semester to the task
          }));
 
@@ -177,7 +186,7 @@ export default function DashboardPage() {
 
          toast({
             title: "Task(s) Created",
-            description: `Task assigned to ${assignToInput.toLowerCase() === 'all' ? targetUsns.length + ` student(s) in semester ${semesterNumber}` : assignToInput.toUpperCase()}.`,
+            description: `Task assigned to ${assignmentTarget.toLowerCase() === 'all' ? targetUsns.length + ` student(s) in semester ${semesterNumber}` : assignmentTarget.toUpperCase()}.`,
          });
          setIsCreateTaskOpen(false); // Close dialog on success
 
@@ -391,3 +400,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+  

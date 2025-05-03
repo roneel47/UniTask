@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React from 'react'; // Removed useState as isLoading comes from props
@@ -53,7 +54,8 @@ const formSchema = z.object({
   title: z.string().min(1, { message: 'Title is required.' }),
   description: z.string().min(1, { message: 'Description is required.' }),
   dueDate: z.date({ required_error: 'Due date is required.' }),
-  assignTo: z.string().min(1, {message: "Specify who to assign to ('all' or USN)."} ),
+  // Use 'usn' field to match the Task type and the receiving function's expected data
+  usn: z.string().min(1, {message: "Specify who to assign to ('all' or USN)."} ),
   semester: z.string().refine(val => /^[1-8]$/.test(val), { message: 'Semester must be selected.' }), // Add semester validation
   // attachmentUrl: z.string().url().optional(), // Optional
 });
@@ -67,7 +69,7 @@ export function CreateTaskDialog({ isOpen, onClose, onCreate, isLoading }: Creat
       title: '',
       description: '',
       dueDate: undefined,
-      assignTo: 'all', // Default to 'all' for the selected semester
+      usn: 'all', // Default to 'all' for the selected semester
       semester: '', // Default semester value
     },
   });
@@ -87,7 +89,7 @@ export function CreateTaskDialog({ isOpen, onClose, onCreate, isLoading }: Creat
             title: values.title,
             description: values.description,
             dueDate: values.dueDate,
-            usn: values.assignTo, // 'all' or specific USN
+            usn: values.usn, // Use the 'usn' field from the form
             semester: parseInt(values.semester, 10), // Ensure semester is a number
             // attachmentUrl: values.attachmentUrl,
         };
@@ -166,7 +168,7 @@ export function CreateTaskDialog({ isOpen, onClose, onCreate, isLoading }: Creat
               />
              <FormField
               control={form.control}
-              name="assignTo"
+              name="usn" // Changed from assignTo to usn
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Assign To</FormLabel>
@@ -234,3 +236,5 @@ export function CreateTaskDialog({ isOpen, onClose, onCreate, isLoading }: Creat
     </Dialog>
   );
 }
+
+  
