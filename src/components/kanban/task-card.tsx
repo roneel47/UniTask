@@ -25,6 +25,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"; // Import AlertDialog components
+import { cn } from '@/lib/utils'; // Import the cn utility function
 
 
 interface TaskCardProps {
