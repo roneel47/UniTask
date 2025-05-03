@@ -6,7 +6,7 @@ import { Task, TaskStatus } from '@/types/task';
 import { Badge } from '@/components/ui/badge';
 import { getDueDateColor, formatDueDate } from '@/lib/date-utils';
 import { Button } from '@/components/ui/button';
-import { Upload, Download, Edit, Trash2, Paperclip, CheckCircle, Clock, Loader2, User, BookCopy } from 'lucide-react'; // Added User, BookCopy icons
+import { Upload, Download, Edit, Trash2, Paperclip, CheckCircle, Clock, Loader2, User, BookCopy, UserCog } from 'lucide-react'; // Added UserCog icon
 import {
   Tooltip,
   TooltipContent,
@@ -168,7 +168,8 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
                     </span>
                      <span className="flex items-center">
                         <BookCopy className="h-3 w-3 mr-1" />
-                        Sem {task.semester}
+                         {/* Display N/A if semester is null */}
+                         Sem {task.semester === null ? 'N/A' : task.semester}
                     </span>
                 </div>
             )}

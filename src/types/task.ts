@@ -1,9 +1,10 @@
+
 export enum TaskStatus {
   ToBeStarted = 'To Be Started',
   InProgress = 'In Progress',
   Completed = 'Completed', // Student marks as completed (before submission if needed)
   Submitted = 'Submitted', // Student submits (e.g., uploads file)
-  Done = 'Done',         // Admin verifies and marks as done
+  Done = 'Done',         // Admin verifies and marks as done,
 }
 
 export interface Task {
@@ -14,7 +15,7 @@ export interface Task {
   status: TaskStatus;
   assignedBy: string; // Admin's USN or name
   usn: string; // Student USN this task instance is for
-  semester: number; // Added semester field
+  semester: number | null; // Allow semester to be null
   attachmentUrl?: string; // URL for admin-provided attachment
   submissionUrl?: string; // URL for student-submitted file
   submittedAt?: Date; // Ensure this is Date | undefined

@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React from 'react'; // Removed useState as isLoading comes from props
@@ -46,8 +45,8 @@ interface CreateTaskDialogProps {
   isLoading: boolean; // Add isLoading prop
 }
 
-// Define semester options
-const semesterOptions = Array.from({ length: 8 }, (_, i) => String(i + 1));
+// Define semester options (1-8 and N/A)
+const semesterOptions = [...Array.from({ length: 8 }, (_, i) => String(i + 1)), 'N/A'];
 
 
 const formSchema = z.object({
@@ -56,7 +55,8 @@ const formSchema = z.object({
   dueDate: z.date({ required_error: 'Due date is required.' }),
   // Use 'usn' field to match the Task type and the receiving function's expected data
   usn: z.string().min(1, {message: "Specify who to assign to ('all' or USN)."} ),
-  semester: z.string().refine(val => /^[1-8]$/.test(val), { message: 'Semester must be selected.' }), // Add semester validation
+   // Semester can be '1'-'8' or 'N/A'
+  semester: z.string().refine(val => semesterOptions.includes(val), { message: 'Semester must be selected.' }),
   // attachmentUrl: z.string().url().optional(), // Optional
 });
 
@@ -90,7 +90,8 @@ export function CreateTaskDialog({ isOpen, onClose, onCreate, isLoading }: Creat
             description: values.description,
             dueDate: values.dueDate,
             usn: values.usn, // Use the 'usn' field from the form
-            semester: parseInt(values.semester, 10), // Ensure semester is a number
+             // Convert 'N/A' string to null, otherwise parse the number
+            semester: values.semester === 'N/A' ? null : parseInt(values.semester, 10),
             // attachmentUrl: values.attachmentUrl,
         };
         await onCreate(taskData); // Call the async onCreate from props
@@ -111,7 +112,7 @@ export function CreateTaskDialog({ isOpen, onClose, onCreate, isLoading }: Creat
         <DialogHeader>
           <DialogTitle>Create New Task/Assignment</DialogTitle>
           <DialogDescription>
-            Fill in the details for the new task. Assigned tasks appear in the respective student's 'To Be Started' column.
+            Fill in the details for the new task. Assigned tasks appear in the respective user's 'To Be Started' column.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -157,7 +158,7 @@ export function CreateTaskDialog({ isOpen, onClose, onCreate, isLoading }: Creat
                       <SelectContent>
                         {semesterOptions.map((sem) => (
                           <SelectItem key={sem} value={sem}>
-                            {sem}
+                            {sem === 'N/A' ? 'N/A (Admins)' : sem}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -176,7 +177,7 @@ export function CreateTaskDialog({ isOpen, onClose, onCreate, isLoading }: Creat
                      <Input placeholder="Enter 'all' or specific USN (e.g., 1RG22CS005)" {...field} disabled={isLoading} />
                   </FormControl>
                    <FormMessage />
-                   <p className="text-xs text-muted-foreground">Use 'all' to assign to all students in the selected semester.</p>
+                    <p className="text-xs text-muted-foreground">Use 'all' to assign to all users in the selected semester/group.</p>
                 </FormItem>
               )}
             />
@@ -236,5 +237,3 @@ export function CreateTaskDialog({ isOpen, onClose, onCreate, isLoading }: Creat
     </Dialog>
   );
 }
-
-  

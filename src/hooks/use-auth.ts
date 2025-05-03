@@ -18,12 +18,13 @@ export const useAuth = () => {
     loading,
     login,
     logout,
-    register, // Now expects (usn, semester, password)
+    register, // Now expects (usn, semester | null, password)
     updateUserRole,
     getAllUsers,
     // promoteSemesters, // Removed global promote
     promoteSpecificSemester, // Include specific promote
     deleteUser, // Include deleteUser
+    removeAdminSemester, // Include removeAdminSemester
     tasks,
     tasksLoading,
     updateTask,
@@ -45,6 +46,7 @@ export const useAuth = () => {
     getAllUsers,
     promoteSpecificSemester, // Return specific promote
     deleteUser, // Return deleteUser
+    removeAdminSemester, // Return removeAdminSemester
     tasks,
     tasksLoading,
     updateTask,
@@ -54,5 +56,3 @@ export const useAuth = () => {
     isMasterAdmin, // Return master admin status
   };
 };
-
-    

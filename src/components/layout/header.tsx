@@ -83,7 +83,11 @@ export function Header() {
                        {/* Display USN in uppercase */}
                       <p className="text-sm font-medium leading-none">{user.usn.toUpperCase()}</p>
                       <p className="text-xs leading-none text-muted-foreground">
-                        {user.role === 'admin' ? 'Administrator' : `Student - Sem ${user.semester ?? 'N/A'}`}
+                         {/* Display N/A if semester is null */}
+                         {user.role === 'admin'
+                            ? `Administrator${user.semester !== null ? ` - Sem ${user.semester}` : ''}`
+                            : `Student - Sem ${user.semester === null ? 'N/A' : user.semester}`
+                         }
                       </p>
                     </div>
                   </DropdownMenuLabel>

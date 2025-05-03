@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -22,8 +23,9 @@ import {
 import { Label } from '@/components/ui/label';
 import { LoadingSpinner } from '@/components/layout/loading-spinner'; // Import loading spinner
 
-// Define semester options
-const semesterOptions = Array.from({ length: 8 }, (_, i) => String(i + 1));
+// Define semester options (1-8 and N/A for admins without semester)
+const semesterOptions = [...Array.from({ length: 8 }, (_, i) => String(i + 1)), 'N/A'];
+
 
 export default function DashboardPage() {
   const {
@@ -41,10 +43,10 @@ export default function DashboardPage() {
   const { toast } = useToast();
 
   // State for filtering (admin only)
-  const [selectedSemesterFilter, setSelectedSemesterFilter] = useState<string | null>(null); // '1' to '8' or null
+  const [selectedSemesterFilter, setSelectedSemesterFilter] = useState<string | null>(null); // '1' to '8', 'N/A' or null
   const [selectedUsnFilter, setSelectedUsnFilter] = useState<string | null>(null); // 'all' or specific USN within selected semester, or null
-  const [studentList, setStudentList] = useState<User[]>([]); // All students fetched initially
-  const [filteredStudentList, setFilteredStudentList] = useState<User[]>([]); // Students filtered by selected semester
+  const [studentList, setStudentList] = useState<User[]>([]); // All users fetched initially
+  const [filteredStudentList, setFilteredStudentList] = useState<User[]>([]); // Students/Admins filtered by selected semester
   const [isFetchingUsers, setIsFetchingUsers] = useState(false);
 
 
@@ -55,9 +57,13 @@ export default function DashboardPage() {
          setIsFetchingUsers(true);
          try {
            const allUsers = await getAllUsers();
-           // Ensure USNs are uppercase in the fetched list
-           const uppercaseUsers = allUsers.map(u => ({...u, usn: u.usn.toUpperCase()}));
-           setStudentList(uppercaseUsers); // Store all users initially
+            // Ensure USNs are uppercase and semester is handled
+           const processedUsers = allUsers.map(u => ({
+             ...u,
+             usn: u.usn.toUpperCase(),
+             semester: u.semester, // Keep semester as number or null
+            }));
+           setStudentList(processedUsers); // Store all users initially
          } catch (error) {
            console.error("Failed to fetch users:", error);
            toast({
@@ -76,17 +82,27 @@ export default function DashboardPage() {
    // Update filtered student list when semester filter changes
    useEffect(() => {
        if (user?.role === 'admin' && selectedSemesterFilter) {
-           const semesterNumber = parseInt(selectedSemesterFilter, 10);
-           const studentsInSemester = studentList.filter(
-               (u) => u.role === 'student' && u.semester === semesterNumber
-           );
-           // Sort students by USN
-           studentsInSemester.sort((a, b) => a.usn.localeCompare(b.usn));
-           setFilteredStudentList(studentsInSemester);
+            let studentsInFilter: User[];
+            if (selectedSemesterFilter === 'N/A') {
+                // Filter for students/admins with null semester
+                 studentsInFilter = studentList.filter(
+                   (u) => (u.role === 'student' || u.role === 'admin') && u.semester === null
+                 );
+            } else {
+                 // Filter for students/admins in a specific numeric semester
+                const semesterNumber = parseInt(selectedSemesterFilter, 10);
+                studentsInFilter = studentList.filter(
+                    (u) => (u.role === 'student' || u.role === 'admin') && u.semester === semesterNumber
+                );
+            }
+
+           // Sort users by USN
+           studentsInFilter.sort((a, b) => a.usn.localeCompare(b.usn));
+           setFilteredStudentList(studentsInFilter);
            // Reset USN filter when semester changes, unless it's 'all'
            // Keep 'all' selected if it was already selected
            if (selectedUsnFilter !== 'all') {
-                setSelectedUsnFilter(null); // Reset to 'Select a student'
+                setSelectedUsnFilter(null); // Reset to 'Select a user'
            }
        } else {
            setFilteredStudentList([]); // Clear list if no semester selected
@@ -121,10 +137,12 @@ export default function DashboardPage() {
      console.log("Creating new task with data:", newTaskData);
 
      // Correctly destructure 'usn' which holds the 'all' or specific USN input from the dialog
+     // Semester is now number | null
      const { title, description, dueDate, usn: usnInput, semester } = newTaskData;
 
-     if (!semester || semester < 1 || semester > 8) {
-       setAssignmentError("Invalid semester selected.");
+     // Validate semester (allow null, or 1-8)
+     if (semester !== null && (semester < 1 || semester > 8)) {
+       setAssignmentError("Invalid semester selected. Must be 1-8 or N/A.");
        setIsCreatingTask(false);
        return Promise.reject("Invalid semester selected."); // Return rejected promise
      }
@@ -138,54 +156,62 @@ export default function DashboardPage() {
 
      try {
          let targetUsns: string[] = [];
-         const semesterNumber = semester; // Already a number
+         const semesterTarget = semester; // number | null
          const assignmentTarget = usnInput.trim(); // Use the correctly destructured variable
 
          // Fetch users of the target semester if studentList is empty (fallback)
          const currentStudentList = studentList.length > 0 ? studentList : await getAllUsers();
-         // Ensure USNs are uppercase
-         const uppercaseStudentList = currentStudentList.map(u => ({...u, usn: u.usn.toUpperCase()}));
+         // Ensure USNs are uppercase and semester is handled
+         const uppercaseStudentList = currentStudentList.map(u => ({
+             ...u,
+             usn: u.usn.toUpperCase(),
+             semester: u.semester, // Keep number or null
+         }));
 
-         const studentsInSemester = uppercaseStudentList.filter(
-             (u) => u.role === 'student' && u.semester === semesterNumber
+          // Filter users matching the target semester (number or null)
+         const usersInSemester = uppercaseStudentList.filter(
+             (u) => (u.role === 'student' || u.role === 'admin') && u.semester === semesterTarget
          );
 
          if (assignmentTarget.toLowerCase() === 'all') {
-             targetUsns = studentsInSemester.map(u => u.usn); // Already uppercase
+             targetUsns = usersInSemester.map(u => u.usn); // Already uppercase
              if (targetUsns.length === 0) {
-                 setAssignmentError(`No students found in semester ${semesterNumber}.`);
+                  const semDisplay = semesterTarget === null ? 'N/A' : `semester ${semesterTarget}`;
+                 setAssignmentError(`No users found in ${semDisplay}.`);
                  setIsCreatingTask(false);
-                 return Promise.reject(`No students found in semester ${semesterNumber}.`); // Return rejected promise
+                 return Promise.reject(`No users found in ${semDisplay}.`); // Return rejected promise
              }
          } else {
              const targetUsnUpper = assignmentTarget.toUpperCase(); // Ensure input USN is uppercase
              // Validate USN exists *within the target semester*
-             const targetStudent = studentsInSemester.find(u => u.usn === targetUsnUpper);
-             if (!targetStudent) {
-                setAssignmentError(`Student with USN ${targetUsnUpper} not found in semester ${semesterNumber}.`);
+             const targetUser = usersInSemester.find(u => u.usn === targetUsnUpper);
+             if (!targetUser) {
+                 const semDisplay = semesterTarget === null ? 'N/A' : `semester ${semesterTarget}`;
+                setAssignmentError(`User with USN ${targetUsnUpper} not found in ${semDisplay}.`);
                 setIsCreatingTask(false);
-                return Promise.reject(`Student not found in semester ${semesterNumber}.`); // Return rejected promise
+                return Promise.reject(`User not found in ${semDisplay}.`); // Return rejected promise
              }
              targetUsns = [targetUsnUpper]; // Already uppercase
          }
 
          const taskIdBase = String(Date.now());
          const tasksToAdd: Task[] = targetUsns.map(assignedUsn => ({
-            id: `${taskIdBase}-${assignedUsn}`, // Ensure unique ID per student task instance
+            id: `${taskIdBase}-${assignedUsn}`, // Ensure unique ID per user task instance
             title: title,
             description: description,
             dueDate: dueDate,
             status: TaskStatus.ToBeStarted,
             assignedBy: user.usn, // Already uppercase from context
             usn: assignedUsn, // Already uppercase
-            semester: semesterNumber, // Add semester to the task
+            semester: semesterTarget, // Add semester (number or null) to the task
          }));
 
-         await addMultipleTasks(tasksToAdd); // Context function handles uppercase
+         await addMultipleTasks(tasksToAdd); // Context function handles uppercase & semester
 
+          const semDisplay = semesterTarget === null ? 'N/A' : `semester ${semesterTarget}`;
          toast({
             title: "Task(s) Created",
-            description: `Task assigned to ${assignmentTarget.toLowerCase() === 'all' ? targetUsns.length + ` student(s) in semester ${semesterNumber}` : assignmentTarget.toUpperCase()}.`,
+             description: `Task assigned to ${assignmentTarget.toLowerCase() === 'all' ? targetUsns.length + ` user(s) in ${semDisplay}` : assignmentTarget.toUpperCase()}.`,
          });
          setIsCreateTaskOpen(false); // Close dialog on success
 
@@ -218,23 +244,33 @@ export default function DashboardPage() {
 
     // Admin view: Apply semester and USN filters
     if (user.role === 'admin') {
-        // 1. Must match selected semester (if a semester is selected)
-        if (selectedSemesterFilter && task.semester !== parseInt(selectedSemesterFilter, 10)) {
-            return false;
-        }
-        // 2. If semester is selected, apply USN filter within that semester
+        let semesterMatch = false;
+         // 1. Check semester filter
         if (selectedSemesterFilter) {
+             if (selectedSemesterFilter === 'N/A') {
+                 semesterMatch = task.semester === null;
+             } else {
+                 semesterMatch = task.semester === parseInt(selectedSemesterFilter, 10);
+             }
+        }
+
+        if (!semesterMatch && selectedSemesterFilter) {
+             return false; // Doesn't match selected semester filter
+        }
+
+         // 2. If semester filter is active (or implicitly 'all' semesters if none selected, though UI prevents this now), apply USN filter
+         if (selectedSemesterFilter) { // Only filter by USN if a semester filter is active
             if (selectedUsnFilter === 'all') {
-                return true; // Show all tasks for the selected semester
+                return true; // Show all tasks for the selected semester/N/A group
             }
             if (selectedUsnFilter) {
-                // Show tasks for the specific student in the selected semester
+                // Show tasks for the specific user in the selected semester/N/A group
                 // Context ensures task.usn is uppercase, selectedUsnFilter is also uppercase
                 return task.usn === selectedUsnFilter;
             }
              return false; // If semester is selected but no USN filter ('all' or specific), show nothing
-        }
-        return false; // If no semester is selected, show nothing
+         }
+         return false; // If no semester is selected, show nothing by default for admin
     }
 
     return false; // Default case
@@ -245,8 +281,11 @@ export default function DashboardPage() {
     <div className="container mx-auto p-4 pt-8">
        <div className="flex flex-col md:flex-row justify-between md:items-center mb-6 gap-4">
         <h1 className="text-2xl font-semibold text-primary">
-          {/* Ensure user.usn and user.semester are displayed */}
-          {user.role === 'admin' ? 'Admin Dashboard' : `Student Dashboard (${user.usn} - Sem ${user.semester ?? 'N/A'})`}
+          {/* Ensure user.usn and user.semester are displayed (handle null semester) */}
+          {user.role === 'admin'
+            ? `Admin Dashboard${user.semester !== null ? ` (Sem ${user.semester})` : ''}`
+            : `Student Dashboard (${user.usn} - Sem ${user.semester === null ? 'N/A' : user.semester})`
+          }
         </h1>
         {/* Admin Controls: Create Task and Filters */}
         {user.role === 'admin' && (
@@ -259,7 +298,7 @@ export default function DashboardPage() {
                </Label>
                <Select
                  value={selectedSemesterFilter ?? ''}
-                 onValueChange={(value) => setSelectedSemesterFilter(value === '' ? null : value)}
+                  onValueChange={(value) => setSelectedSemesterFilter(value === '' ? null : value)}
                  disabled={isFetchingUsers || tasksLoading}
                >
                  <SelectTrigger id="semester-filter" className="w-full sm:w-[150px]">
@@ -268,19 +307,19 @@ export default function DashboardPage() {
                  <SelectContent>
                    {semesterOptions.map(sem => (
                      <SelectItem key={sem} value={sem}>
-                       Semester {sem}
+                       {sem === 'N/A' ? 'N/A (Admins)' : `Semester ${sem}`}
                      </SelectItem>
                    ))}
                  </SelectContent>
                </Select>
             </div>
 
-            {/* Student Filter (appears after semester is selected) */}
+            {/* User Filter (appears after semester is selected) */}
             {selectedSemesterFilter && (
                 <div className="flex items-center gap-2">
-                   <Label htmlFor="student-filter" className="text-sm font-medium shrink-0">
+                   <Label htmlFor="user-filter" className="text-sm font-medium shrink-0">
                      <Filter className="inline-block h-4 w-4 mr-1 relative -top-px"/>
-                     Student:
+                     User:
                    </Label>
                    <Select
                      value={selectedUsnFilter ?? ''}
@@ -288,19 +327,23 @@ export default function DashboardPage() {
                      onValueChange={(value) => setSelectedUsnFilter(value === '' ? null : (value === 'all' ? 'all' : value.toUpperCase()))}
                      disabled={isFetchingUsers || tasksLoading || !selectedSemesterFilter}
                    >
-                     <SelectTrigger id="student-filter" className="w-full sm:w-[200px]">
-                       <SelectValue placeholder={isFetchingUsers ? "Loading..." : "Select a student"} />
+                     <SelectTrigger id="user-filter" className="w-full sm:w-[200px]">
+                       <SelectValue placeholder={isFetchingUsers ? "Loading..." : "Select a user"} />
                      </SelectTrigger>
                      <SelectContent>
-                       <SelectItem value="all">All Students in Sem {selectedSemesterFilter}</SelectItem>
+                        <SelectItem value="all">
+                            All Users in {selectedSemesterFilter === 'N/A' ? 'N/A' : `Sem ${selectedSemesterFilter}`}
+                        </SelectItem>
                        {filteredStudentList.map(student => (
                          // Ensure value is uppercase
                          <SelectItem key={student.usn} value={student.usn}>
-                           {student.usn}
+                           {student.usn} {student.role === 'admin' ? '(Admin)' : ''}
                          </SelectItem>
                        ))}
-                       {filteredStudentList.length === 0 && !isFetchingUsers && (
-                          <p className="p-2 text-sm text-muted-foreground">No students in Sem {selectedSemesterFilter}</p>
+                        {filteredStudentList.length === 0 && !isFetchingUsers && (
+                           <p className="p-2 text-sm text-muted-foreground">
+                               No users in {selectedSemesterFilter === 'N/A' ? 'N/A' : `Sem ${selectedSemesterFilter}`}
+                           </p>
                        )}
                      </SelectContent>
                    </Select>
@@ -337,7 +380,7 @@ export default function DashboardPage() {
             <div className="flex flex-col items-center justify-center h-[calc(100vh-250px)] text-center">
                <BookCopy className="h-12 w-12 text-muted-foreground mb-4" />
               <p className="text-lg font-medium text-muted-foreground">Select a semester</p>
-              <p className="text-sm text-muted-foreground">Choose a semester from the dropdown above to view student tasks.</p>
+              <p className="text-sm text-muted-foreground">Choose a semester (or N/A) from the dropdown above to view tasks.</p>
             </div>
           )}
 
@@ -345,8 +388,10 @@ export default function DashboardPage() {
            {user?.role === 'admin' && selectedSemesterFilter && !selectedUsnFilter && (
              <div className="flex flex-col items-center justify-center h-[calc(100vh-250px)] text-center">
                <Filter className="h-12 w-12 text-muted-foreground mb-4" />
-               <p className="text-lg font-medium text-muted-foreground">Select a student filter</p>
-               <p className="text-sm text-muted-foreground">Choose 'All Students' or a specific student to view tasks for Semester {selectedSemesterFilter}.</p>
+               <p className="text-lg font-medium text-muted-foreground">Select a user filter</p>
+                <p className="text-sm text-muted-foreground">
+                   Choose 'All Users' or a specific user to view tasks for {selectedSemesterFilter === 'N/A' ? 'N/A' : `Semester ${selectedSemesterFilter}`}.
+                </p>
              </div>
            )}
 
@@ -360,15 +405,15 @@ export default function DashboardPage() {
            )}
 
            {/* Message if filters selected but no tasks found */}
-           {user?.role === 'admin' && selectedSemesterFilter && selectedUsnFilter && filteredTasks.length === 0 && (
+            {user?.role === 'admin' && selectedSemesterFilter && selectedUsnFilter && filteredTasks.length === 0 && (
               <div className="flex flex-col items-center justify-center h-[calc(100vh-250px)] text-center">
                    <Columns className="h-12 w-12 text-muted-foreground mb-4" />
                   <p className="text-lg font-medium text-muted-foreground">No tasks found</p>
                   <p className="text-sm text-muted-foreground">
                      {selectedUsnFilter === 'all'
-                       ? `No tasks found for Semester ${selectedSemesterFilter}.`
+                        ? `No tasks found for ${selectedSemesterFilter === 'N/A' ? 'N/A' : `Semester ${selectedSemesterFilter}`}.`
                        // Ensure displayed USN is uppercase
-                       : `No tasks found for student ${selectedUsnFilter} in Semester ${selectedSemesterFilter}.`}
+                        : `No tasks found for user ${selectedUsnFilter} in ${selectedSemesterFilter === 'N/A' ? 'N/A' : `Semester ${selectedSemesterFilter}`}.`}
                    </p>
               </div>
             )}
@@ -389,7 +434,7 @@ export default function DashboardPage() {
         <CreateTaskDialog
           isOpen={isCreateTaskOpen}
           onClose={() => { if (!isCreatingTask) setIsCreateTaskOpen(false); }}
-          onCreate={handleCreateTask} // Handles uppercase USN creation
+          onCreate={handleCreateTask} // Handles uppercase USN creation & null semester
           isLoading={isCreatingTask}
         />
       )}

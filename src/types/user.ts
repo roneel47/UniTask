@@ -2,7 +2,7 @@
 export interface User {
   usn: string;
   role: 'student' | 'admin';
-  semester: number; // Ensure this field exists
+  semester: number | null; // Allow semester to be null
   password?: string; // Add optional password for mock auth state management
   // Add other user-related fields if needed, e.g., name, department
   // name?: string;

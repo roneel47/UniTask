@@ -19,11 +19,12 @@ interface AuthContextType {
   tasksLoading: boolean; // Add loading state for tasks
   login: (usn: string, password?: string) => Promise<void>;
   logout: () => void;
-  register: (usn: string, semester: number, password?: string) => Promise<void>; // Added semester
+  register: (usn: string, semester: number | null, password?: string) => Promise<void>; // Allow null semester
   updateUserRole: (usn: string, role: 'student' | 'admin') => Promise<void>;
   getAllUsers: () => Promise<User[]>;
   promoteSpecificSemester: (semesterToPromote: number) => Promise<{ promotedCount: number; maxSemesterCount: number }>; // Added specific promote
   deleteUser: (usnToDelete: string) => Promise<void>; // Added delete user
+  removeAdminSemester: (usnToRemoveSemester: string) => Promise<void>; // Added remove semester for admin
   updateTask: (taskId: string, updates: Partial<Task>) => Promise<void>; // Function to update a task
   addTask: (newTask: Task) => Promise<void>; // Function to add a task
   addMultipleTasks: (newTasks: Task[]) => Promise<void>; // Function to add multiple tasks
@@ -76,9 +77,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
             dueDate: new Date(task.dueDate),
             submittedAt: task.submittedAt ? new Date(task.submittedAt) : undefined,
             completedAt: task.completedAt ? new Date(task.completedAt) : undefined,
-             // Ensure semester is a number, default to 0 or handle appropriately if missing
-            semester: typeof task.semester === 'number' ? task.semester : 0,
-             // Ensure USNs in tasks are uppercase
+            // Ensure semester is a number or null, default to 0 if missing/invalid for non-null cases
+             semester: typeof task.semester === 'number' ? task.semester : (task.semester === null ? null : 0),
+            // Ensure USNs in tasks are uppercase
             usn: task.usn?.toUpperCase() ?? '',
             assignedBy: task.assignedBy?.toUpperCase() ?? '',
         }));
@@ -95,7 +96,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
             return JSON.parse(usersString).map((user: any) => ({
                 ...user,
                 usn: user.usn.toUpperCase(), // Ensure USN is uppercase on deserialization too
-                semester: typeof user.semester === 'number' ? user.semester : 0,
+                // Ensure semester is number or null, default 0 for master admin if undefined/invalid
+                 semester: user.usn === MASTER_ADMIN_USN ? 0 : (typeof user.semester === 'number' ? user.semester : (user.semester === null ? null : 0)),
                 password: user.password, // Read the stored (hashed) password
             }));
         } catch (error) {
@@ -115,7 +117,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Ensure the template uses the *hashed* password
       const masterAdminUserTemplate = {
         ...initialMockUsers.find(u => u.usn === MASTER_ADMIN_USN)!,
-        password: hashPassword('MasterPass!456') // Ensure the template in memory uses the correct *current* hashed password
+        password: hashPassword('MasterPass!456'), // Ensure the template in memory uses the correct *current* hashed password
+        semester: 0, // Master admin always has semester 0
       };
 
       try {
@@ -135,11 +138,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
              // Use the stored user data (including the hashed password from storage)
              combinedUsersMap.set(storedUser.usn, {
                  ...storedUser,
-                 // If it's the master admin, overwrite with the template's correct hashed password
+                 // If it's the master admin, overwrite with the template's correct details
                  password: storedUser.usn === MASTER_ADMIN_USN ? masterAdminUserTemplate.password : storedUser.password,
-                 // Ensure master admin role/semester are correct
                  role: storedUser.usn === MASTER_ADMIN_USN ? 'admin' : storedUser.role,
-                 semester: storedUser.usn === MASTER_ADMIN_USN ? 0 : storedUser.semester,
+                 semester: storedUser.usn === MASTER_ADMIN_USN ? 0 : storedUser.semester, // Ensure master admin sem is 0
              });
         });
 
@@ -148,7 +150,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
              if (!combinedUsersMap.has(initialUser.usn)) {
                  // Ensure the correct hashed password is used if adding from initial template
                  const initialPassword = initialUser.usn === MASTER_ADMIN_USN ? masterAdminUserTemplate.password : initialUser.password;
-                 combinedUsersMap.set(initialUser.usn, { ...initialUser, password: initialPassword }); // Add with hashed password
+                 combinedUsersMap.set(initialUser.usn, {
+                    ...initialUser,
+                    password: initialPassword, // Add with hashed password
+                    semester: initialUser.usn === MASTER_ADMIN_USN ? 0 : initialUser.semester, // Ensure master admin sem is 0
+                 });
              }
          });
 
@@ -156,7 +162,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (!combinedUsersMap.has(MASTER_ADMIN_USN)) {
             combinedUsersMap.set(MASTER_ADMIN_USN, masterAdminUserTemplate);
         } else {
-            // Master admin was in the map, ensure its password/role/sem are correct from the template
+            // Master admin was in the map, ensure its details are correct from the template
             const currentMasterAdminData = combinedUsersMap.get(MASTER_ADMIN_USN)!;
             combinedUsersMap.set(MASTER_ADMIN_USN, {
                 ...currentMasterAdminData,
@@ -190,12 +196,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const storedUser = localStorage.getItem('uniTaskUser');
         if (storedUser) {
           const parsedUser = JSON.parse(storedUser);
-           // Ensure semester is correctly loaded and USN is uppercase for the session user
+           // Ensure semester is correctly loaded (number or null) and USN is uppercase for the session user
            // Session user doesn't need password stored
           setUser({
               ...parsedUser,
               usn: parsedUser.usn.toUpperCase(),
-              semester: typeof parsedUser.semester === 'number' ? parsedUser.semester : 0,
+              semester: typeof parsedUser.semester === 'number' ? parsedUser.semester : (parsedUser.semester === null ? null : 0),
           });
         }
       } catch (error) {
@@ -221,18 +227,28 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Helper function to save mock users to localStorage (now includes hashed passwords)
   const saveMockUsers = useCallback((updatedUsers: User[]) => {
-    // Ensure USN is uppercase before saving state and local storage
-    const uppercaseUsers = updatedUsers.map(u => ({...u, usn: u.usn.toUpperCase()}));
-    setMockUsers(uppercaseUsers); // Keep hashed passwords in runtime state
-    localStorage.setItem('uniTaskMockUsers', JSON.stringify(uppercaseUsers)); // Save WITH hashed passwords
+    // Ensure USN is uppercase and semester is handled correctly before saving state and local storage
+    const processedUsers = updatedUsers.map(u => ({
+        ...u,
+        usn: u.usn.toUpperCase(),
+         // Ensure semester is number or null, default 0 for master admin
+        semester: u.usn === MASTER_ADMIN_USN ? 0 : (typeof u.semester === 'number' ? u.semester : (u.semester === null ? null : 0)),
+    }));
+    setMockUsers(processedUsers); // Keep hashed passwords in runtime state
+    localStorage.setItem('uniTaskMockUsers', JSON.stringify(processedUsers)); // Save WITH hashed passwords
   }, []);
 
     // Helper function to save tasks to localStorage
   const saveTasks = useCallback((updatedTasks: Task[]) => {
-     // Ensure USN in tasks is uppercase before saving
-    const uppercaseTasks = updatedTasks.map(t => ({...t, usn: t.usn.toUpperCase(), assignedBy: t.assignedBy.toUpperCase() }));
-    setTasks(uppercaseTasks);
-    localStorage.setItem('uniTaskTasks', serializeTasks(uppercaseTasks));
+     // Ensure USN in tasks is uppercase and semester is valid before saving
+    const processedTasks = updatedTasks.map(t => ({
+        ...t,
+        usn: t.usn.toUpperCase(),
+        assignedBy: t.assignedBy.toUpperCase(),
+        semester: typeof t.semester === 'number' ? t.semester : (t.semester === null ? null : 0), // Handle null semester
+    }));
+    setTasks(processedTasks);
+    localStorage.setItem('uniTaskTasks', serializeTasks(processedTasks));
   }, []);
 
 
@@ -263,7 +279,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (passwordMatch) {
         console.log(`Login successful for ${usn}`); // Debug log
         const { password: _, ...userToStore } = foundUser; // Destructure to remove hashed password before storing in session/state
-        setUser(userToStore); // Update runtime user state (USN already uppercase)
+        setUser(userToStore); // Update runtime user state (USN & semester already handled)
         localStorage.setItem('uniTaskUser', JSON.stringify(userToStore)); // Save user session (without password)
         setLoading(false);
     } else {
@@ -274,7 +290,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 };
 
 
-  const register = async (usnInput: string, semester: number, passwordInput?: string): Promise<void> => {
+  const register = async (usnInput: string, semester: number | null, passwordInput?: string): Promise<void> => {
     const usn = usnInput.toUpperCase(); // Ensure USN is uppercase
     setLoading(true);
     await new Promise(resolve => setTimeout(resolve, 500));
@@ -290,21 +306,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
         throw new Error("Password must be at least 6 characters long.");
     }
 
-     if (semester < 1 || semester > 8) {
+    // Allow null semester, but validate numbers are between 1 and 8
+    if (semester !== null && (semester < 1 || semester > 8)) {
        setLoading(false);
-       throw new Error("Invalid semester. Must be between 1 and 8.");
+       throw new Error("Invalid semester. Must be between 1 and 8, or null.");
      }
 
 
     const newUser: User = {
       usn: usn, // Already uppercase
       role: 'student',
-      semester: semester, // Assign semester
+      semester: semester, // Assign semester (can be null)
       password: hashPassword(passwordInput), // Store HASHED password
     };
 
     const updatedUsers = [...mockUsers, newUser];
-    saveMockUsers(updatedUsers); // Saves to state and localStorage (WITH hashed pw), handles uppercase
+    saveMockUsers(updatedUsers); // Saves to state and localStorage (WITH hashed pw), handles uppercase & semester
 
     setLoading(false);
   };
@@ -330,20 +347,70 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     const updatedUsers = [...mockUsers];
-    // Preserve hashed password and semester when changing role
+    // Preserve hashed password and semester when changing role initially
     updatedUsers[userIndex] = { ...updatedUsers[userIndex], role: role };
 
-    saveMockUsers(updatedUsers); // Handles uppercase, preserves hashed password
+    // If becoming a student, ensure they have a valid semester (or null if allowed)
+    // If becoming admin, semester might be removed later by master admin
+    if (role === 'student' && (updatedUsers[userIndex].semester === undefined || (updatedUsers[userIndex].semester !== null && (updatedUsers[userIndex].semester! < 1 || updatedUsers[userIndex].semester! > 8)))) {
+        // Assign a default semester (e.g., 1) or throw error if semester is strictly required
+        // For now, let's allow null if it was null, otherwise default to 1 if invalid number
+         updatedUsers[userIndex].semester = updatedUsers[userIndex].semester === null ? null : 1;
+         // Or: throw new Error(`User ${usn} needs a valid semester (1-8) to become a student.`);
+    }
+
+
+    saveMockUsers(updatedUsers); // Handles uppercase, preserves hashed password, handles semester
 
     setLoading(false);
   };
 
+  const removeAdminSemester = async (usnToRemoveSemesterInput: string): Promise<void> => {
+      const usnToRemoveSemester = usnToRemoveSemesterInput.toUpperCase();
+      // Only MASTER ADMIN can remove semester from OTHER admins
+      if (user?.usn !== MASTER_ADMIN_USN) {
+          throw new Error("Permission denied. Only the master administrator can remove semesters from admins.");
+      }
+      if (usnToRemoveSemester === MASTER_ADMIN_USN) {
+          throw new Error("Master administrator cannot have their semester removed (it's always 0).");
+      }
+      if (user?.usn === usnToRemoveSemester) {
+         throw new Error("Cannot remove semester from yourself.");
+      }
+
+
+      setLoading(true);
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const userIndex = mockUsers.findIndex(u => u.usn === usnToRemoveSemester);
+
+      if (userIndex === -1) {
+        setLoading(false);
+        throw new Error("User not found.");
+      }
+
+      if (mockUsers[userIndex].role !== 'admin') {
+          setLoading(false);
+          throw new Error("Can only remove semester from users with the 'admin' role.");
+      }
+
+      const updatedUsers = [...mockUsers];
+      // Set semester to null for the target admin
+      updatedUsers[userIndex] = { ...updatedUsers[userIndex], semester: null };
+
+      saveMockUsers(updatedUsers); // Handles uppercase, saves null semester
+
+      setLoading(false);
+  };
+
+
   const getAllUsers = async (): Promise<User[]> => {
+    // Allow any admin to view users
     if (user?.role !== 'admin') {
         throw new Error("Permission denied. Only administrators can view user list.");
     }
      await new Promise(resolve => setTimeout(resolve, 300));
-     // Return users without passwords from the runtime state (already uppercase)
+     // Return users without passwords from the runtime state (already processed)
      return mockUsers.map(({ password, ...userWithoutPassword }) => userWithoutPassword);
   }
 
@@ -375,14 +442,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return u; // Keep other users unchanged
     });
 
-    saveMockUsers(updatedUsers); // Save the updated user list (handles uppercase)
+    saveMockUsers(updatedUsers); // Save the updated user list (handles uppercase, semester)
 
      // If the current logged-in user is a student *in the promoted semester*, update their session
     if (user && user.role === 'student' && user.semester === semesterToPromote) {
         const updatedLoggedInUser = updatedUsers.find(u => u.usn === user.usn); // Find using uppercase USN
         if (updatedLoggedInUser) {
             const { password: _, ...userToStore } = updatedLoggedInUser; // Remove hashed password for session
-            setUser(userToStore); // Update runtime user state (USN already uppercase)
+            setUser(userToStore); // Update runtime user state (USN & semester handled)
             localStorage.setItem('uniTaskUser', JSON.stringify(userToStore)); // Update session storage
         }
     }
@@ -413,7 +480,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
 
       const updatedUsers = mockUsers.filter(u => u.usn !== usnToDelete);
-      saveMockUsers(updatedUsers); // Saves runtime state and localStorage (with hashed passwords)
+      saveMockUsers(updatedUsers); // Saves runtime state and localStorage (with hashed passwords, handled semesters)
 
        // Also delete tasks associated with the user
        const updatedTasks = tasks.filter(task => task.usn !== usnToDelete);
@@ -458,7 +525,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         ...updates,
         usn: updatedUsn, // Ensure USN is uppercase
         assignedBy: updatedAssignedBy, // Ensure assignedBy is uppercase
-        semester: updates.semester ?? currentSemester, // Preserve semester if not explicitly updated
+        // Preserve semester if not explicitly updated, handle null
+        semester: updates.semester !== undefined ? updates.semester : currentSemester,
     };
 
 
@@ -480,7 +548,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
 
-    saveTasks(updatedTasks); // Handles uppercase for tasks
+    saveTasks(updatedTasks); // Handles uppercase for tasks & semester validity
     setTasksLoading(false);
   };
 
@@ -488,14 +556,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (user?.role !== 'admin') {
           throw new Error("Permission denied. Only administrators can create tasks.");
       }
-       if (typeof newTask.semester !== 'number' || newTask.semester < 1 || newTask.semester > 8) {
+      // Allow null semester, but validate numbers are between 1 and 8
+       if (newTask.semester !== null && (typeof newTask.semester !== 'number' || newTask.semester < 1 || newTask.semester > 8)) {
             throw new Error("Invalid or missing semester for the new task.");
         }
       setTasksLoading(true);
       await new Promise(resolve => setTimeout(resolve, 200)); // Simulate creation delay
 
-       // Ensure new task USN and assignedBy are uppercase
-      const taskToAdd = {...newTask, usn: newTask.usn.toUpperCase(), assignedBy: newTask.assignedBy.toUpperCase()};
+       // Ensure new task USN and assignedBy are uppercase, semester is number or null
+      const taskToAdd = {
+        ...newTask,
+        usn: newTask.usn.toUpperCase(),
+        assignedBy: newTask.assignedBy.toUpperCase(),
+        semester: typeof newTask.semester === 'number' ? newTask.semester : (newTask.semester === null ? null : 0),
+      };
 
       // Basic validation: check if ID already exists
       if (tasks.some(task => task.id === taskToAdd.id)) {
@@ -506,7 +580,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
 
       const updatedTasks = [...tasks, taskToAdd];
-      saveTasks(updatedTasks); // Handles uppercase
+      saveTasks(updatedTasks); // Handles uppercase & semester validity
       setTasksLoading(false);
   }
 
@@ -516,13 +590,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
       if (newTasks.length === 0) return;
 
-       // Ensure all new tasks have uppercase USNs and assignedBy, and valid semesters
+       // Ensure all new tasks have uppercase USNs and assignedBy, and valid semesters (number 1-8 or null)
        const tasksToAdd: Task[] = [];
        for (const task of newTasks) {
-           if (typeof task.semester !== 'number' || task.semester < 1 || task.semester > 8) {
-               throw new Error(`Invalid or missing semester for task "${task.title}".`);
+            if (task.semester !== null && (typeof task.semester !== 'number' || task.semester < 1 || task.semester > 8)) {
+               throw new Error(`Invalid or missing semester for task "${task.title}". Must be 1-8 or null.`);
            }
-           tasksToAdd.push({...task, usn: task.usn.toUpperCase(), assignedBy: task.assignedBy.toUpperCase()});
+           tasksToAdd.push({
+            ...task,
+            usn: task.usn.toUpperCase(),
+            assignedBy: task.assignedBy.toUpperCase(),
+            semester: typeof task.semester === 'number' ? task.semester : (task.semester === null ? null : 0), // Ensure correct type
+            });
        }
 
 
@@ -539,7 +618,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       if (uniqueNewTasks.length > 0) {
           const updatedTasks = [...tasks, ...uniqueNewTasks];
-          saveTasks(updatedTasks); // Handles uppercase
+          saveTasks(updatedTasks); // Handles uppercase & semester validity
       }
 
       setTasksLoading(false);
@@ -558,7 +637,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
          console.warn(`Task with ID ${taskId} not found for deletion.`);
        }
 
-      saveTasks(updatedTasks); // Handles uppercase
+      saveTasks(updatedTasks); // Handles uppercase & semester validity
       setTasksLoading(false);
   }
 
@@ -579,6 +658,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     getAllUsers,
     promoteSpecificSemester, // Expose specific promote
     deleteUser, // Expose delete user
+    removeAdminSemester, // Expose remove semester for admin
     updateTask,
     addTask,
     addMultipleTasks,
@@ -588,4 +668,3 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
-
