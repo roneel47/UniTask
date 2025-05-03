@@ -114,33 +114,52 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
 
     // --- Load initial data and check session on mount ---
-  useEffect(() => {
+   useEffect(() => {
     const loadInitialData = () => {
       setLoading(true);
       setTasksLoading(true);
       let loadedUsers: User[] = [];
+      const storedMockUsers = localStorage.getItem('uniTaskMockUsers');
+      const masterAdminUser = initialMockUsers.find(u => u.usn === MASTER_ADMIN_USN)!; // Get the master admin template
+
       try {
-        // Load users (without passwords initially)
-        const storedMockUsers = localStorage.getItem('uniTaskMockUsers');
         loadedUsers = deserializeUsers(storedMockUsers);
 
-        if (loadedUsers.length === 0) {
-            // If storage empty, use initial mock (which includes passwords)
-            // Ensure initial mock USNs are uppercase
-            const uppercaseInitialUsers = initialMockUsers.map(u => ({...u, usn: u.usn.toUpperCase()}));
-            setMockUsers(uppercaseInitialUsers); // State now has users with passwords
-            localStorage.setItem('uniTaskMockUsers', serializeUsers(uppercaseInitialUsers)); // Save without passwords
+        let usersWithPasswords: User[];
+
+        // Find if master admin exists in loaded users
+        const loadedMasterAdminIndex = loadedUsers.findIndex(u => u.usn === MASTER_ADMIN_USN);
+
+        if (loadedMasterAdminIndex !== -1) {
+            // Master admin exists in storage, ensure password is set from initial data
+            usersWithPasswords = loadedUsers.map((loadedUser, index) => {
+                 // Get password from initial data if available (for other users too, if they were in initial)
+                const initialUser = initialMockUsers.find(u => u.usn === loadedUser.usn);
+                 // Specifically ensure master admin has the correct password from initial data
+                if (index === loadedMasterAdminIndex) {
+                     return { ...loadedUser, password: masterAdminUser.password };
+                }
+                return { ...loadedUser, password: initialUser?.password };
+            });
         } else {
-            // Merge stored users (no passwords) with initial mock (has passwords)
-            // to retain passwords for login simulation without storing them plain
-             const usersWithPasswords = loadedUsers.map(loadedUser => {
-                 // Ensure initial mock USNs are uppercase for comparison
-                 const uppercaseInitialUsers = initialMockUsers.map(u => ({...u, usn: u.usn.toUpperCase()}));
-                 const initialUser = uppercaseInitialUsers.find(u => u.usn === loadedUser.usn); // Compare uppercase USNs
-                 return { ...loadedUser, password: initialUser?.password };
-             });
-            setMockUsers(usersWithPasswords);
+            // Master admin NOT in storage, add them with password and merge with others
+            usersWithPasswords = [
+                 masterAdminUser, // Add master admin with password
+                ...loadedUsers.map(loadedUser => { // Add other loaded users, trying to find their initial passwords
+                     const initialUser = initialMockUsers.find(u => u.usn === loadedUser.usn);
+                     return { ...loadedUser, password: initialUser?.password };
+                 })
+             ];
         }
+
+
+        // Remove duplicates just in case (preferring the ones with potential passwords)
+        const uniqueUsersMap = new Map<string, User>();
+        usersWithPasswords.forEach(u => uniqueUsersMap.set(u.usn, u));
+        const finalUsersWithPasswords = Array.from(uniqueUsersMap.values());
+
+        setMockUsers(finalUsersWithPasswords); // State now has users with correct passwords (especially master admin)
+        localStorage.setItem('uniTaskMockUsers', serializeUsers(finalUsersWithPasswords)); // Save without passwords
 
 
         // Load tasks
@@ -172,10 +191,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
         localStorage.removeItem('uniTaskUser');
         localStorage.removeItem('uniTaskMockUsers');
         localStorage.removeItem('uniTaskTasks');
-         // Ensure initial mock USNs are uppercase
-        const uppercaseInitialUsers = initialMockUsers.map(u => ({...u, usn: u.usn.toUpperCase()}));
-        setMockUsers(uppercaseInitialUsers); // Reset to initial state (with passwords)
-        localStorage.setItem('uniTaskMockUsers', serializeUsers(uppercaseInitialUsers)); // Save without passwords
+        // Reset to include only the master admin with password
+        setMockUsers([masterAdminUser]);
+        localStorage.setItem('uniTaskMockUsers', serializeUsers([masterAdminUser])); // Save without password
         setTasks(initialMockTasks); // Reset tasks
         localStorage.setItem('uniTaskTasks', serializeTasks(initialMockTasks));
       } finally {
@@ -186,6 +204,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     loadInitialData();
      // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
 
   // Helper function to save mock users to localStorage (removes passwords)
   const saveMockUsers = useCallback((updatedUsers: User[]) => {
@@ -204,30 +223,43 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
 
-  const login = async (usnInput: string, password?: string): Promise<void> => {
+   const login = async (usnInput: string, password?: string): Promise<void> => {
     const usn = usnInput.toUpperCase(); // Ensure USN is uppercase
     setLoading(true);
+    console.log(`Attempting login for USN: ${usn}`); // Debug log
     await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
 
     const foundUser = mockUsers.find(u => u.usn === usn); // Already uppercase in mockUsers
 
+    console.log('Found user in mock data:', foundUser); // Debug log
+
     if (!foundUser) {
-      setLoading(false);
-      throw new Error("USN not found.");
+        console.error(`Login failed: USN ${usn} not found.`); // Debug log
+        setLoading(false);
+        throw new Error("USN not found.");
     }
 
-    // Simplified password check for demo (checking against runtime state which has passwords)
-    // Allow login without password if none is set (useful for initial setup/testing)
-    if (!foundUser.password || foundUser.password === password) {
-      const { password: _, ...userToStore } = foundUser;
-      setUser(userToStore); // Update runtime user state (USN already uppercase)
-      localStorage.setItem('uniTaskUser', JSON.stringify(userToStore)); // Save user session (without password)
-      setLoading(false);
+    // Stricter password check: Provided password must exactly match the stored password.
+    // Allow login if stored password is undefined/empty AND provided password is also undefined/empty (legacy/initial state)
+    const passwordMatch = foundUser.password === password;
+    const noPasswordCaseMatch = (!foundUser.password && !password);
+
+    console.log(`Password check for ${usn}: Stored='${foundUser.password}', Provided='${password}', Match=${passwordMatch || noPasswordCaseMatch}`); // Debug log
+
+
+    if (passwordMatch || noPasswordCaseMatch) {
+        console.log(`Login successful for ${usn}`); // Debug log
+        const { password: _, ...userToStore } = foundUser;
+        setUser(userToStore); // Update runtime user state (USN already uppercase)
+        localStorage.setItem('uniTaskUser', JSON.stringify(userToStore)); // Save user session (without password)
+        setLoading(false);
     } else {
-      setLoading(false);
-      throw new Error("Invalid USN or password.");
+        console.error(`Login failed for ${usn}: Invalid password.`); // Debug log
+        setLoading(false);
+        throw new Error("Invalid USN or password.");
     }
-  };
+};
+
 
   const register = async (usnInput: string, semester: number, password?: string): Promise<void> => {
     const usn = usnInput.toUpperCase(); // Ensure USN is uppercase
@@ -545,5 +577,3 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
-
-    
