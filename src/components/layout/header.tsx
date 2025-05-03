@@ -40,54 +40,51 @@ export function Header() {
       <div className="container flex h-14 items-center">
         <div className="mr-4 flex">
           <Link href="/" className="mr-6 flex items-center space-x-2">
-            {/* Updated SVG icon based on the provided image */}
+            {/* Updated SVG icon based on the provided image and feedback */}
              <svg
                 xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 60 50" // Adjusted viewBox for better aspect ratio
+                viewBox="0 0 64 64" // Use a square viewBox for easier coordination
                 fill="none"
-                className="h-8 w-8" // Slightly larger for visibility
+                className="h-8 w-8"
              >
-                {/* Book Outline - Use primary theme color */}
-                <path
-                   d="M7 44C7 41.7909 8.79086 40 11 40H50.5V45C50.5 47.2091 48.7091 49 46.5 49H11C8.79086 49 7 47.2091 7 45V44Z"
-                   fill="hsl(var(--primary))"
-                />
-                <path
-                   fillRule="evenodd"
-                   clipRule="evenodd"
-                   d="M53 5C53 2.79086 51.2091 1 49 1H11C8.79086 1 7 2.79086 7 5V40H53V5ZM11 3C9.89543 3 9 3.89543 9 5V38H51V5C51 3.89543 50.1046 3 49 3H11Z"
-                   fill="hsl(var(--primary))"
-                />
+                 {/* Book Cover Outline - Primary Color Stroke */}
+                 <path
+                    d="M54 10C54 7.79086 52.2091 6 50 6H14C11.7908 6 10 7.79086 10 10V54C10 56.2091 11.7908 58 14 58H50C52.2091 58 54 56.2091 54 54V10Z"
+                    stroke="hsl(var(--primary))"
+                    strokeWidth="3"
+                    rx="4" // Added rounded corners
+                 />
+                 {/* Spine - Slightly darker/lighter primary fill */}
+                  <rect x="6" y="8" width="4" height="48" rx="2" fill="hsl(var(--primary))" opacity="0.7"/>
 
-                {/* Left Page Content */}
+                 {/* Page Divider Line - Subtle primary color */}
+                 <line x1="32" y1="6" x2="32" y2="58" stroke="hsl(var(--primary))" strokeWidth="1.5" opacity="0.4"/>
+
+
+                {/* Left Page Content (Adjusted coordinates for 64x64 viewBox) */}
                 {/* Yellow Square */}
-                <rect x="13" y="8" width="6" height="6" rx="1" fill="hsl(var(--chart-5))" /> {/* Using a chart color for yellow */}
+                <rect x="15" y="12" width="8" height="8" rx="1.5" fill="hsl(var(--chart-5))" /> {/* Chart color 5 for yellow */}
                 {/* Green Checks */}
-                <path d="M14 21L17 24L22 19" stroke="hsl(var(--chart-2))" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /> {/* Using a chart color for green */}
-                <path d="M14 28L17 31L22 26" stroke="hsl(var(--chart-2))" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M14 35L17 38L22 33" stroke="hsl(var(--chart-2))" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                {/* Blue Lines - Use primary theme color */}
-                <rect x="25" y="9" width="8" height="3" rx="1.5" fill="hsl(var(--primary))" />
-                <rect x="25" y="21" width="8" height="3" rx="1.5" fill="hsl(var(--primary))" />
-                <rect x="25" y="28" width="8" height="3" rx="1.5" fill="hsl(var(--primary))" />
-                <rect x="25" y="35" width="8" height="3" rx="1.5" fill="hsl(var(--primary))" />
+                <path d="M16 28L19 31L24 26" stroke="hsl(var(--chart-2))" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /> {/* Chart color 2 for green */}
+                <path d="M16 38L19 41L24 36" stroke="hsl(var(--chart-2))" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M16 48L19 51L24 46" stroke="hsl(var(--chart-2))" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
 
 
-                {/* Right Page Content - Use primary theme color */}
-                {/* Graduation Cap */}
-                <path d="M37 16L45 12L53 16L45 20L37 16Z" fill="hsl(var(--primary))" />
-                <path d="M39 17.5V23C41.5 24.5 48.5 24.5 51 23V17.5" stroke="hsl(var(--primary))" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                {/* Right Page Content (Adjusted coordinates for 64x64 viewBox) */}
+                 {/* Graduation Cap */}
+                 <path d="M38 18L45 14L52 18L45 22L38 18Z" fill="hsl(var(--primary))" />
+                 <path d="M40 20V25C42.5 26.5 47.5 26.5 50 25V20" stroke="hsl(var(--primary))" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                  {/* Tassel */}
-                 <line x1="53" y1="16" x2="54" y2="20" stroke="hsl(var(--primary))" strokeWidth="1.5" strokeLinecap="round"/>
+                 <line x1="52" y1="18" x2="53.5" y2="23" stroke="hsl(var(--primary))" strokeWidth="2" strokeLinecap="round"/>
 
 
                 {/* ID Card */}
-                <rect x="37" y="27" width="16" height="10" rx="2" fill="hsl(var(--primary))" />
+                <rect x="37" y="35" width="16" height="10" rx="2" fill="hsl(var(--primary))" />
                  {/* Headshot circle - fill with background, stroke with primary */}
-                 <circle cx="41.5" cy="32" r="2" fill="hsl(var(--background))" stroke="hsl(var(--primary))" strokeWidth="1" />
+                 <circle cx="41" cy="40" r="2" fill="hsl(var(--background))" stroke="hsl(var(--primary))" strokeWidth="1" />
                  {/* Lines on ID - stroke with background */}
-                 <line x1="45.5" y1="30.5" x2="50.5" y2="30.5" stroke="hsl(var(--background))" strokeWidth="1.5" strokeLinecap="round"/>
-                 <line x1="45.5" y1="33.5" x2="49.5" y2="33.5" stroke="hsl(var(--background))" strokeWidth="1.5" strokeLinecap="round"/>
+                 <line x1="45" y1="38.5" x2="50" y2="38.5" stroke="hsl(var(--background))" strokeWidth="1.5" strokeLinecap="round"/>
+                 <line x1="45" y1="41.5" x2="49" y2="41.5" stroke="hsl(var(--background))" strokeWidth="1.5" strokeLinecap="round"/>
 
              </svg>
 
