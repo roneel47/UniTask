@@ -132,27 +132,21 @@ export default function DashboardPage() {
     }
   };
 
-  const handleCreateTask = async (newTaskData: Omit<Task, 'id' | 'status' | 'assignedBy'>) => {
-     if (user?.role !== 'admin') return Promise.reject("Permission denied."); // Return rejected promise
+ const handleCreateTask = async (newTaskData: Omit<Task, 'id' | 'status' | 'assignedBy'>) => {
+     if (!user || user.role !== 'admin') return Promise.reject("Permission denied.");
 
      setIsCreatingTask(true);
      setAssignmentError(null);
      console.log("Creating new task with data:", newTaskData);
 
-     // Correctly destructure 'usn' which holds the 'all' or specific USN input from the dialog
-     // Semester is now number | null
-     // Include assignedByName
      const { title, description, assignedByName, dueDate, usn: usnInput, semester } = newTaskData;
 
-
-     // Validate semester (allow null, or 1-8)
      if (semester !== null && (semester < 1 || semester > 8)) {
-       setAssignmentError("Invalid semester selected. Must be 1-8 or N/A.");
-       setIsCreatingTask(false);
-       return Promise.reject("Invalid semester selected."); // Return rejected promise
+         setAssignmentError("Invalid semester selected. Must be 1-8 or N/A.");
+         setIsCreatingTask(false);
+         return Promise.reject("Invalid semester selected.");
      }
 
-     // Check if usnInput is defined before trimming
      if (usnInput === undefined || usnInput === null) {
          setAssignmentError("Assignment target (USN or 'all') is missing.");
          setIsCreatingTask(false);
@@ -162,71 +156,67 @@ export default function DashboardPage() {
      try {
          let targetUsns: string[] = [];
          const semesterTarget = semester; // number | null
-         const assignmentTarget = usnInput.trim(); // Use the correctly destructured variable
-         console.log(`Assignment Target: '${assignmentTarget}', Semester Target: ${semesterTarget}`); // Debug Log
+         const assignmentTarget = usnInput.trim();
+         console.log(`Assignment Target: '${assignmentTarget}', Semester Target: ${semesterTarget}`);
 
-         // --- FIX START: Fetch ALL users *within* the function ---
-         // Fetch the absolute latest user list directly here
+         // --- FIX: Fetch ALL users *within* the function ---
          const allCurrentUsers = await getAllUsers();
-         // Ensure USNs are uppercase and semester is handled correctly
          const uppercaseUserList = allCurrentUsers.map(u => ({
              ...u,
              usn: u.usn.toUpperCase(),
-             semester: u.semester, // Keep number or null
+             semester: u.semester,
          }));
-         console.log("Fetched users inside handleCreateTask:", uppercaseUserList.length); // Debug Log
-         // --- FIX END ---
+         console.log("Fetched users inside handleCreateTask:", uppercaseUserList.length);
+         // --- End of FIX ---
 
-          // Filter users matching the target semester (number or null) using the freshly fetched list
          const usersInSemester = uppercaseUserList.filter(
              (u) => (u.role === 'student' || u.role === 'admin') && u.semester === semesterTarget
          );
-         console.log(`Users found in target semester (${semesterTarget}):`, usersInSemester.length, usersInSemester.map(u => u.usn)); // Debug Log
+         console.log(`Users found in target semester (${semesterTarget}):`, usersInSemester.length, usersInSemester.map(u => u.usn));
 
 
          if (assignmentTarget.toLowerCase() === 'all') {
              targetUsns = usersInSemester.map(u => u.usn); // Already uppercase
              if (targetUsns.length === 0) {
-                  const semDisplay = semesterTarget === null ? 'N/A' : `semester ${semesterTarget}`;
+                 const semDisplay = semesterTarget === null ? 'N/A' : `semester ${semesterTarget}`;
                  setAssignmentError(`No users found in ${semDisplay}.`);
                  setIsCreatingTask(false);
-                 return Promise.reject(`No users found in ${semDisplay}.`); // Return rejected promise
+                 return Promise.reject(`No users found in ${semDisplay}.`);
              }
-             console.log(`Assigning to 'all' in semester ${semesterTarget}. Target USNs:`, targetUsns); // Debug Log
+             console.log(`Assigning to 'all' in semester ${semesterTarget}. Target USNs:`, targetUsns);
          } else {
-             const targetUsnUpper = assignmentTarget.toUpperCase(); // Ensure input USN is uppercase
-             // Validate USN exists *within the target semester* using the freshly fetched & filtered list
+             const targetUsnUpper = assignmentTarget.toUpperCase();
              const targetUser = usersInSemester.find(u => u.usn === targetUsnUpper);
              if (!targetUser) {
                  const semDisplay = semesterTarget === null ? 'N/A' : `semester ${semesterTarget}`;
-                setAssignmentError(`User with USN ${targetUsnUpper} not found in ${semDisplay}.`);
-                setIsCreatingTask(false);
-                 console.error(`User ${targetUsnUpper} not found in semester ${semesterTarget}. Available in semester:`, usersInSemester.map(u => u.usn)); // Debug Log
-                return Promise.reject(`User not found in ${semDisplay}.`); // Return rejected promise
+                 setAssignmentError(`User with USN ${targetUsnUpper} not found in ${semDisplay}.`);
+                 setIsCreatingTask(false);
+                 console.error(`User ${targetUsnUpper} not found in semester ${semesterTarget}. Available in semester:`, usersInSemester.map(u => u.usn));
+                 return Promise.reject(`User not found in ${semDisplay}.`);
              }
-             targetUsns = [targetUsnUpper]; // Already uppercase
-             console.log(`Assigning to specific USN: ${targetUsnUpper}`); // Debug Log
+             targetUsns = [targetUsnUpper];
+             console.log(`Assigning to specific USN: ${targetUsnUpper}`);
          }
 
          const taskIdBase = String(Date.now());
          const tasksToAdd: Task[] = targetUsns.map(assignedUsn => ({
-            id: `${taskIdBase}-${assignedUsn}`, // Ensure unique ID per user task instance
-            title: title,
-            description: description,
-            dueDate: dueDate,
-            status: TaskStatus.ToBeStarted,
-            assignedBy: user.usn, // Already uppercase from context
-            assignedByName: assignedByName, // Add assignedByName
-            usn: assignedUsn, // Already uppercase
-            semester: semesterTarget, // Add semester (number or null) to the task
+             id: `${taskIdBase}-${assignedUsn}`, // Ensure unique ID per user task instance
+             title: title,
+             description: description,
+             dueDate: dueDate,
+             status: TaskStatus.ToBeStarted,
+             assignedBy: user.usn, // Already uppercase from context
+             assignedByName: assignedByName,
+             usn: assignedUsn, // Already uppercase
+             semester: semesterTarget,
          }));
 
-         console.log("Tasks to be added:", tasksToAdd); // Debug Log
-         await addMultipleTasks(tasksToAdd); // Context function handles uppercase & semester
+         console.log("Tasks to be added:", tasksToAdd);
+         await addMultipleTasks(tasksToAdd);
 
-          const semDisplay = semesterTarget === null ? 'N/A' : `semester ${semesterTarget}`;
+         const semDisplay = semesterTarget === null ? 'N/A' : `semester ${semesterTarget}`;
          toast({
-            title: "Task(s) Created",
+             title: "Task(s) Created",
              description: `Task assigned to ${assignmentTarget.toLowerCase() === 'all' ? targetUsns.length + ` user(s) in ${semDisplay}` : assignmentTarget.toUpperCase()}.`,
          });
          setIsCreateTaskOpen(false); // Close dialog on success
@@ -235,16 +225,16 @@ export default function DashboardPage() {
          console.error("Failed to create task(s):", error);
          const errorMessage = error.message || "Could not create the task(s).";
          toast({
-            variant: "destructive",
-            title: "Creation Failed",
-            description: errorMessage,
+             variant: "destructive",
+             title: "Creation Failed",
+             description: errorMessage,
          });
          setAssignmentError(errorMessage);
          throw error; // Re-throw error so the dialog knows it failed
      } finally {
          setIsCreatingTask(false);
      }
-  };
+ };
 
 
   // Filter tasks based on role and selected filters (semester and USN)
@@ -410,6 +400,7 @@ export default function DashboardPage() {
                    Create Task
                  </Button>
              )}
+             {/* Removed Refresh Button */}
           </div>
         )}
       </div>
@@ -586,5 +577,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    

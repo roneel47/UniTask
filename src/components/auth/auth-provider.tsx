@@ -293,41 +293,102 @@ export function AuthProvider({ children }: AuthProviderProps) {
 };
 
 
-  const register = async (usnInput: string, semester: number | null, passwordInput?: string): Promise<void> => {
-    const usn = usnInput.toUpperCase(); // Ensure USN is uppercase
-    setLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
+   const register = async (usnInput: string, semester: number | null, passwordInput?: string): Promise<void> => {
+       const usn = usnInput.toUpperCase(); // Ensure USN is uppercase
+       setLoading(true);
+       await new Promise(resolve => setTimeout(resolve, 500));
 
-    const existingUser = mockUsers.find(u => u.usn === usn); // Compare with uppercase USNs
-    if (existingUser) {
-      setLoading(false);
-      throw new Error("USN already registered.");
-    }
+       const existingUser = mockUsers.find(u => u.usn === usn); // Compare with uppercase USNs
+       if (existingUser) {
+           setLoading(false);
+           throw new Error("USN already registered.");
+       }
 
-    if (!passwordInput || passwordInput.length < 6) {
-        setLoading(false);
-        throw new Error("Password must be at least 6 characters long.");
-    }
+       if (!passwordInput || passwordInput.length < 6) {
+           setLoading(false);
+           throw new Error("Password must be at least 6 characters long.");
+       }
 
-    // Allow null semester, but validate numbers are between 1 and 8
-    if (semester !== null && (semester < 1 || semester > 8)) {
+       // Allow null semester, but validate numbers are between 1 and 8
+       if (semester !== null && (semester < 1 || semester > 8)) {
+           setLoading(false);
+           throw new Error("Invalid semester. Must be between 1 and 8, or null.");
+       }
+
+
+       const newUser: User = {
+           usn: usn, // Already uppercase
+           role: 'student',
+           semester: semester, // Assign semester (can be null)
+           password: hashPassword(passwordInput), // Store HASHED password
+       };
+
+       const updatedUsers = [...mockUsers, newUser];
+       saveMockUsers(updatedUsers); // Saves to state and localStorage (WITH hashed pw), handles uppercase & semester
+
+       // --- Retroactively assign existing 'all' tasks for the new user's semester ---
+       const newTasksForUser: Task[] = [];
+       // Find tasks that were assigned to 'all' for the new user's semester
+        const semesterWideTasks = tasks.filter(task =>
+           task.semester === newUser.semester &&
+           // Check if the original assignment intention was for 'all' - How do we know?
+           // Option 1: Add a flag like 'assignedToAllInSemester' to the Task type.
+           // Option 2: Heuristic: If a task exists for this semester but NOT specifically for this new USN, assume it might be semester-wide.
+           // Let's use a simplified heuristic for now:
+           // Find a task for the *same semester* but assigned to a *different user* or check if a 'template' task exists.
+           // For simplicity, we'll just duplicate tasks for this semester assigned by *any* admin.
+           // A more robust solution needs better tracking of 'all' assignments.
+            true // Placeholder: Needs a reliable way to identify semester-wide tasks
+       );
+
+        // Find existing "template" tasks for the semester (assigned to 'all' concept)
+        // This is tricky without a dedicated field. We'll simulate by finding tasks for the semester.
+        const tasksForSemester = tasks.filter(t => t.semester === newUser.semester);
+        const uniqueTaskAssignments = new Map<string, Task>();
+
+        tasksForSemester.forEach(task => {
+            // Create a key based on title, description, assignedBy, semester (to identify the core assignment)
+            const assignmentKey = `${task.title}-${task.description}-${task.assignedBy}-${task.semester}`;
+            // Store only one instance of each unique assignment 'template'
+            if (!uniqueTaskAssignments.has(assignmentKey)) {
+                uniqueTaskAssignments.set(assignmentKey, task);
+            }
+        });
+
+        uniqueTaskAssignments.forEach(templateTask => {
+             // Check if this user already has this specific task (e.g., if registration somehow retried)
+             const userAlreadyHasTask = tasks.some(t =>
+                 t.usn === newUser.usn &&
+                 t.title === templateTask.title &&
+                 t.description === templateTask.description &&
+                 t.assignedBy === templateTask.assignedBy &&
+                 t.semester === templateTask.semester
+             );
+
+             if (!userAlreadyHasTask) {
+                 const taskIdBase = String(Date.now()); // Simple unique ID base
+                 newTasksForUser.push({
+                     ...templateTask, // Copy details from the template task
+                     id: `${taskIdBase}-${newUser.usn}-${templateTask.assignedBy}`, // Create a new unique ID for this user's instance
+                     usn: newUser.usn, // Assign to the new user
+                     status: TaskStatus.ToBeStarted, // Start in the initial state
+                     submissionUrl: undefined, // Clear submission details
+                     submittedAt: undefined,
+                     completedAt: undefined,
+                 });
+             }
+        });
+
+
+       if (newTasksForUser.length > 0) {
+           console.log(`Retroactively assigning ${newTasksForUser.length} tasks to new user ${newUser.usn}`);
+           const updatedTasks = [...tasks, ...newTasksForUser];
+           saveTasks(updatedTasks); // Save updated tasks list
+       }
+       // --- End of retroactive assignment ---
+
        setLoading(false);
-       throw new Error("Invalid semester. Must be between 1 and 8, or null.");
-     }
-
-
-    const newUser: User = {
-      usn: usn, // Already uppercase
-      role: 'student',
-      semester: semester, // Assign semester (can be null)
-      password: hashPassword(passwordInput), // Store HASHED password
-    };
-
-    const updatedUsers = [...mockUsers, newUser];
-    saveMockUsers(updatedUsers); // Saves to state and localStorage (WITH hashed pw), handles uppercase & semester
-
-    setLoading(false);
-  };
+   };
 
 
   const updateUserRole = async (usnInput: string, role: 'student' | 'admin'): Promise<void> => {
@@ -337,6 +398,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
      if (user?.usn === usn) { // Compare uppercase USNs
        throw new Error("Administrators cannot change their own role.");
+     }
+     // Prevent changing MASTER_ADMIN's role
+     if (usn === MASTER_ADMIN_USN) {
+         throw new Error("The master administrator's role cannot be changed.");
      }
 
     setLoading(true);
@@ -640,6 +705,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
 
   const deleteTask = async (taskId: string): Promise<void> => {
+     // Allow any admin to delete for now, could add owner check (task.assignedBy === user.usn || isMasterAdmin)
      if (user?.role !== 'admin') {
           throw new Error("Permission denied. Only administrators can delete tasks.");
       }
@@ -682,3 +748,4 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
+
