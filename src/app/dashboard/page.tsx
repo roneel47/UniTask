@@ -163,21 +163,26 @@ export default function DashboardPage() {
          let targetUsns: string[] = [];
          const semesterTarget = semester; // number | null
          const assignmentTarget = usnInput.trim(); // Use the correctly destructured variable
+         console.log(`Assignment Target: '${assignmentTarget}', Semester Target: ${semesterTarget}`); // Debug Log
 
          // --- FIX START: Fetch ALL users *within* the function ---
+         // Fetch the absolute latest user list directly here
          const allCurrentUsers = await getAllUsers();
-         // Ensure USNs are uppercase and semester is handled
+         // Ensure USNs are uppercase and semester is handled correctly
          const uppercaseUserList = allCurrentUsers.map(u => ({
              ...u,
              usn: u.usn.toUpperCase(),
              semester: u.semester, // Keep number or null
          }));
+         console.log("Fetched users inside handleCreateTask:", uppercaseUserList.length); // Debug Log
          // --- FIX END ---
 
           // Filter users matching the target semester (number or null) using the freshly fetched list
          const usersInSemester = uppercaseUserList.filter(
              (u) => (u.role === 'student' || u.role === 'admin') && u.semester === semesterTarget
          );
+         console.log(`Users found in target semester (${semesterTarget}):`, usersInSemester.length, usersInSemester.map(u => u.usn)); // Debug Log
+
 
          if (assignmentTarget.toLowerCase() === 'all') {
              targetUsns = usersInSemester.map(u => u.usn); // Already uppercase
@@ -187,17 +192,20 @@ export default function DashboardPage() {
                  setIsCreatingTask(false);
                  return Promise.reject(`No users found in ${semDisplay}.`); // Return rejected promise
              }
+             console.log(`Assigning to 'all' in semester ${semesterTarget}. Target USNs:`, targetUsns); // Debug Log
          } else {
              const targetUsnUpper = assignmentTarget.toUpperCase(); // Ensure input USN is uppercase
-             // Validate USN exists *within the target semester*
+             // Validate USN exists *within the target semester* using the freshly fetched & filtered list
              const targetUser = usersInSemester.find(u => u.usn === targetUsnUpper);
              if (!targetUser) {
                  const semDisplay = semesterTarget === null ? 'N/A' : `semester ${semesterTarget}`;
                 setAssignmentError(`User with USN ${targetUsnUpper} not found in ${semDisplay}.`);
                 setIsCreatingTask(false);
+                 console.error(`User ${targetUsnUpper} not found in semester ${semesterTarget}. Available in semester:`, usersInSemester.map(u => u.usn)); // Debug Log
                 return Promise.reject(`User not found in ${semDisplay}.`); // Return rejected promise
              }
              targetUsns = [targetUsnUpper]; // Already uppercase
+             console.log(`Assigning to specific USN: ${targetUsnUpper}`); // Debug Log
          }
 
          const taskIdBase = String(Date.now());
@@ -213,6 +221,7 @@ export default function DashboardPage() {
             semester: semesterTarget, // Add semester (number or null) to the task
          }));
 
+         console.log("Tasks to be added:", tasksToAdd); // Debug Log
          await addMultipleTasks(tasksToAdd); // Context function handles uppercase & semester
 
           const semDisplay = semesterTarget === null ? 'N/A' : `semester ${semesterTarget}`;
@@ -577,3 +586,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    
