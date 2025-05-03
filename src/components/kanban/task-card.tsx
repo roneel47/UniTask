@@ -5,7 +5,7 @@ import { Task, TaskStatus } from '@/types/task';
 import { Badge } from '@/components/ui/badge';
 import { getDueDateColor, formatDueDate } from '@/lib/date-utils';
 import { Button } from '@/components/ui/button';
-import { Upload, Download, Edit, Trash2, Paperclip, CheckCircle, Clock, Loader2 } from 'lucide-react';
+import { Upload, Download, Edit, Trash2, Paperclip, CheckCircle, Clock, Loader2, User } from 'lucide-react'; // Added User icon
 import {
   Tooltip,
   TooltipContent,
@@ -155,6 +155,13 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
             >
                 {task.title}
             </CardTitle>
+            {/* Display Assigned USN */}
+            {isAdmin && ( // Only show USN to admins for clarity, can be shown always too
+                <div className="flex items-center text-xs text-muted-foreground pt-1">
+                    <User className="h-3 w-3 mr-1" />
+                    <span>{task.usn}</span>
+                </div>
+            )}
             <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
                <TooltipProvider>
                  <Tooltip>
