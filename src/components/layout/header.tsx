@@ -40,12 +40,40 @@ export function Header() {
       <div className="container flex h-14 items-center">
         <div className="mr-4 flex">
           <Link href="/" className="mr-6 flex items-center space-x-2">
-            {/* Replace with a logo if available */}
-             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6 text-primary">
-                <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
-                <path d="M2 17l10 5 10-5"></path>
-                <path d="M2 12l10 5 10-5"></path>
-             </svg>
+            {/* Replace with the new custom SVG icon */}
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5" // Slightly adjusted stroke width for the new icon style
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-7 w-7 text-primary" // Use primary color, increased size slightly
+            >
+              {/* Book Outline */}
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+              <path d="M6.5 2H20v15H6.5A2.5 2.5 0 0 1 4 14.5V4.5A2.5 2.5 0 0 1 6.5 2z" />
+              {/* Left Page Content */}
+              <rect x="6" y="5" width="2" height="2" rx="0.5" fill="#FFD700" stroke="none"/> {/* Yellow square */}
+              <path d="m8 9 1 1 2-2" stroke="#32CD32" strokeWidth="2"/> {/* Green check 1 */}
+              <path d="m8 12 1 1 2-2" stroke="#32CD32" strokeWidth="2"/> {/* Green check 2 */}
+              <path d="m8 15 1 1 2-2" stroke="#32CD32" strokeWidth="2"/> {/* Green check 3 */}
+              <line x1="12" y1="6" x2="10" y2="6" stroke="currentColor" />
+              <line x1="12" y1="9" x2="10" y2="9" stroke="currentColor" />
+              <line x1="12" y1="12" x2="10" y2="12" stroke="currentColor" />
+              <line x1="12" y1="15" x2="10" y2="15" stroke="currentColor" />
+
+              {/* Right Page Content */}
+              {/* Graduation Cap */}
+              <path d="M22 10v6M2 10l10-5 10 5-10 5z" stroke="currentColor"/>
+              <path d="M6 12v5c3 3 12 3 15 0v-5" stroke="currentColor"/>
+              {/* ID Card */}
+              <rect x="14" y="13" width="6" height="4" rx="1" stroke="currentColor"/>
+              <circle cx="16" cy="15" r="0.5" fill="currentColor" stroke="currentColor"/>
+              <line x1="18" y1="14.5" x2="19" y2="14.5" stroke="currentColor" />
+              <line x1="18" y1="15.5" x2="19" y2="15.5" stroke="currentColor" />
+            </svg>
             <span className="font-bold text-primary">UniTask</span>
           </Link>
           {/* Add navigation links here if needed */}
