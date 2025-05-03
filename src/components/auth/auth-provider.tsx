@@ -26,6 +26,7 @@ interface AuthContextType {
   addTask: (newTask: Task) => Promise<void>; // Function to add a task
   addMultipleTasks: (newTasks: Task[]) => Promise<void>; // Function to add multiple tasks
   deleteTask: (taskId: string) => Promise<void>; // Function to delete a task (admin only)
+  isMasterAdmin: boolean; // Added master admin check
 }
 
 // Create the context with a default value
@@ -36,10 +37,13 @@ interface AuthProviderProps {
 }
 
 // Initial Mock Data (only used if localStorage is empty)
-// Only one admin initially
 const initialMockUsers: User[] = [
   // Ensure the master admin USN is uppercase here - NEW CREDENTIALS
   { usn: MASTER_ADMIN_USN, role: 'admin', semester: 0, password: 'MasterPass!456' }, // New password
+  // Add other initial admins/students here if needed for testing
+  // { usn: 'TEACHER001', role: 'admin', semester: 0, password: 'adminpassword' },
+  // { usn: '1RG22CS001', role: 'admin', semester: 5, password: 'adminpassword' },
+  // { usn: '1RG22CS002', role: 'student', semester: 5, password: 'studentpassword' },
 ];
 
 // Initial Mock Tasks (kept for demonstration, adjust as needed if no students exist initially)
@@ -49,7 +53,7 @@ const initialMockTasks: Task[] = [];
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true); // Auth loading
-  const [mockUsers, setMockUsers] = useState<User[]>([]);
+  const [mockUsers, setMockUsers] = useState<User[]>([]); // Holds users WITH passwords in runtime state
   const [tasks, setTasks] = useState<Task[]>([]); // Tasks state
   const [tasksLoading, setTasksLoading] = useState(true); // Tasks loading
 
@@ -118,48 +122,58 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const loadInitialData = () => {
       setLoading(true);
       setTasksLoading(true);
-      let loadedUsers: User[] = [];
+      let usersFromStorage: User[] = [];
       const storedMockUsers = localStorage.getItem('uniTaskMockUsers');
-      const masterAdminUser = initialMockUsers.find(u => u.usn === MASTER_ADMIN_USN)!; // Get the master admin template
+      const masterAdminUserTemplate = initialMockUsers.find(u => u.usn === MASTER_ADMIN_USN)!; // Get the master admin template
 
       try {
-        loadedUsers = deserializeUsers(storedMockUsers);
+        // 1. Load users from storage (these don't have passwords)
+        usersFromStorage = deserializeUsers(storedMockUsers);
 
-        let usersWithPasswords: User[];
+        // 2. Create a map of initial users (with passwords) for easy lookup
+        const initialUsersMap = new Map<string, User>(initialMockUsers.map(u => [u.usn, u]));
 
-        // Find if master admin exists in loaded users
-        const loadedMasterAdminIndex = loadedUsers.findIndex(u => u.usn === MASTER_ADMIN_USN);
+        // 3. Combine storage users with initial users, prioritizing stored data but adding passwords from initial data
+        const combinedUsersMap = new Map<string, User>();
 
-        if (loadedMasterAdminIndex !== -1) {
-            // Master admin exists in storage, ensure password is set from initial data
-            usersWithPasswords = loadedUsers.map((loadedUser, index) => {
-                 // Get password from initial data if available (for other users too, if they were in initial)
-                const initialUser = initialMockUsers.find(u => u.usn === loadedUser.usn);
-                 // Specifically ensure master admin has the correct password from initial data
-                if (index === loadedMasterAdminIndex) {
-                     return { ...loadedUser, password: masterAdminUser.password };
-                }
-                return { ...loadedUser, password: initialUser?.password };
-            });
-        } else {
-            // Master admin NOT in storage, add them with password and merge with others
-            usersWithPasswords = [
-                 masterAdminUser, // Add master admin with password
-                ...loadedUsers.map(loadedUser => { // Add other loaded users, trying to find their initial passwords
-                     const initialUser = initialMockUsers.find(u => u.usn === loadedUser.usn);
-                     return { ...loadedUser, password: initialUser?.password };
-                 })
-             ];
-        }
+        // Add users from storage first
+        usersFromStorage.forEach(storedUser => {
+             const initialUserData = initialUsersMap.get(storedUser.usn);
+             // Add stored user, plus password if found in initial data
+             combinedUsersMap.set(storedUser.usn, {
+                 ...storedUser,
+                 password: initialUserData?.password,
+             });
+        });
+
+         // Add any initial users that weren't in storage (like the master admin on first load)
+         initialMockUsers.forEach(initialUser => {
+             if (!combinedUsersMap.has(initialUser.usn)) {
+                 combinedUsersMap.set(initialUser.usn, initialUser); // Add with password
+             }
+         });
+
+         // Ensure the master admin always has the correct current password from the initial template
+         const masterAdminCurrentData = combinedUsersMap.get(MASTER_ADMIN_USN);
+         if (masterAdminCurrentData) {
+             combinedUsersMap.set(MASTER_ADMIN_USN, {
+                 ...masterAdminCurrentData,
+                 password: masterAdminUserTemplate.password, // Ensure correct password
+                 role: 'admin', // Ensure role is correct
+                 semester: 0, // Ensure semester is correct
+             });
+         } else {
+             // Master admin wasn't even in combined map, add fresh template
+             combinedUsersMap.set(MASTER_ADMIN_USN, masterAdminUserTemplate);
+         }
 
 
-        // Remove duplicates just in case (preferring the ones with potential passwords)
-        const uniqueUsersMap = new Map<string, User>();
-        usersWithPasswords.forEach(u => uniqueUsersMap.set(u.usn, u));
-        const finalUsersWithPasswords = Array.from(uniqueUsersMap.values());
+        const finalUsersWithPasswords = Array.from(combinedUsersMap.values());
 
-        setMockUsers(finalUsersWithPasswords); // State now has users with correct passwords (especially master admin)
-        localStorage.setItem('uniTaskMockUsers', serializeUsers(finalUsersWithPasswords)); // Save without passwords
+        // 4. Set runtime state with passwords
+        setMockUsers(finalUsersWithPasswords);
+        // 5. Save to local storage *without* passwords
+        localStorage.setItem('uniTaskMockUsers', serializeUsers(finalUsersWithPasswords));
 
 
         // Load tasks
@@ -192,8 +206,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         localStorage.removeItem('uniTaskMockUsers');
         localStorage.removeItem('uniTaskTasks');
         // Reset to include only the master admin with password
-        setMockUsers([masterAdminUser]);
-        localStorage.setItem('uniTaskMockUsers', serializeUsers([masterAdminUser])); // Save without password
+        setMockUsers([masterAdminUserTemplate]); // Use template which includes password
+        localStorage.setItem('uniTaskMockUsers', serializeUsers([masterAdminUserTemplate])); // Save without password
         setTasks(initialMockTasks); // Reset tasks
         localStorage.setItem('uniTaskTasks', serializeTasks(initialMockTasks));
       } finally {
@@ -229,9 +243,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     console.log(`Attempting login for USN: ${usn}`); // Debug log
     await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
 
+    // Use the runtime state `mockUsers` which should contain passwords
     const foundUser = mockUsers.find(u => u.usn === usn); // Already uppercase in mockUsers
 
-    console.log('Found user in mock data:', foundUser); // Debug log
+    console.log('Found user in runtime mock data:', foundUser); // Debug log
 
     if (!foundUser) {
         console.error(`Login failed: USN ${usn} not found.`); // Debug log
@@ -249,7 +264,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     if (passwordMatch || noPasswordCaseMatch) {
         console.log(`Login successful for ${usn}`); // Debug log
-        const { password: _, ...userToStore } = foundUser;
+        const { password: _, ...userToStore } = foundUser; // Destructure to remove password before storing in session/state
         setUser(userToStore); // Update runtime user state (USN already uppercase)
         localStorage.setItem('uniTaskUser', JSON.stringify(userToStore)); // Save user session (without password)
         setLoading(false);
@@ -317,10 +332,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     const updatedUsers = [...mockUsers];
-    // Also ensure semester is preserved (or potentially allow admin to change it too?)
+    // Preserve password and semester when changing role
     updatedUsers[userIndex] = { ...updatedUsers[userIndex], role: role };
 
-    saveMockUsers(updatedUsers); // Handles uppercase
+    saveMockUsers(updatedUsers); // Handles uppercase, preserves password in runtime state
 
     // If the currently logged-in admin modifies *another* user who happens to be logged in elsewhere,
     // their session data won't update automatically here. This implementation only updates the modifier's session
@@ -405,7 +420,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
 
       const updatedUsers = mockUsers.filter(u => u.usn !== usnToDelete);
-      saveMockUsers(updatedUsers);
+      saveMockUsers(updatedUsers); // Saves runtime state (with passwords) and localStorage (without)
 
        // Also delete tasks associated with the user
        const updatedTasks = tasks.filter(task => task.usn !== usnToDelete);
@@ -554,6 +569,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setTasksLoading(false);
   }
 
+   // Add a helper to check if the current user is the master admin
+  const isMasterAdmin = user?.usn === MASTER_ADMIN_USN;
+
 
   // Provide tasks and related functions in the context
   const value = {
@@ -573,6 +591,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     addTask,
     addMultipleTasks,
     deleteTask,
+    isMasterAdmin, // Expose master admin check
    };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
