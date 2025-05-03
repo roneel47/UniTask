@@ -14,8 +14,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/hooks/use-auth';
-import { LogOut, User as UserIcon, Users, ChevronsUpDown } from 'lucide-react'; // Added Users icon
+import { LogOut, User as UserIcon, Users, ChevronsUpDown } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { ThemeToggle } from '@/components/theme/theme-toggle'; // Import ThemeToggle
 
 export function Header() {
   const { user, loading, logout } = useAuth();
@@ -56,8 +57,9 @@ export function Header() {
               </nav>
            )}
         </div>
-        <div className="flex flex-1 items-center justify-end space-x-4">
-          <nav className="flex items-center space-x-1">
+        <div className="flex flex-1 items-center justify-end space-x-2"> {/* Reduced space for theme toggle */}
+           <ThemeToggle /> {/* Add the ThemeToggle component */}
+           <nav className="flex items-center space-x-1">
             {loading ? (
               <div className="h-8 w-20 animate-pulse rounded-md bg-muted" />
             ) : user ? (

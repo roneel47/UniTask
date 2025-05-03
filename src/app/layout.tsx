@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { Toaster } from '@/components/ui/toaster';
 import { Header } from '@/components/layout/header';
 import { AuthProvider } from '@/components/auth/auth-provider';
+import { ThemeProvider } from "@/components/theme/theme-provider"; // Import ThemeProvider
 
 export const metadata: Metadata = {
   title: 'UniTask',
@@ -26,13 +27,21 @@ export default function RootLayout({
           GeistMono.variable
         )}
       >
-        <AuthProvider>
-          <div className="relative flex min-h-screen flex-col">
-            <Header />
-            <main className="flex-1">{children}</main>
-          </div>
-          <Toaster />
-        </AuthProvider>
+        {/* Wrap AuthProvider and children with ThemeProvider */}
+        <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+          <AuthProvider>
+            <div className="relative flex min-h-screen flex-col">
+              <Header />
+              <main className="flex-1">{children}</main>
+            </div>
+            <Toaster />
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
