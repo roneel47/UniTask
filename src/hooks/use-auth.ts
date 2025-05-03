@@ -30,7 +30,7 @@ export const useAuth = () => {
     updateTask,
     addTask,
     addMultipleTasks,
-    deleteTask,
+    deleteTask, // Now includes optional deleteAllInstances
     fetchTasks, // Include fetchTasks
   } = context;
 
@@ -53,11 +53,10 @@ export const useAuth = () => {
     updateTask,
     addTask,
     addMultipleTasks,
-    deleteTask,
+    deleteTask, // Return modified deleteTask
     fetchTasks, // Return fetchTasks
     isMasterAdmin, // Return master admin status
   };
 };
-
 
     

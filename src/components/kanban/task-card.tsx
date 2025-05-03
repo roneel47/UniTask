@@ -295,10 +295,8 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
                         </Tooltip>
                     </TooltipProvider>
 
-                    {/* Simplified Delete Button - Triggering context directly */}
-                    {/* Consider if delete should even be on the Kanban card or only in a dedicated list/manage view */}
-                    {/* <AlertDialog> ... </AlertDialog> removed */}
-                    {/* Simple delete icon button - consider adding confirmation elsewhere if needed */}
+                    {/* Delete button REMOVED from Task Card - handled in the "Tasks Created By You" table */}
+                    {/*
                      <TooltipProvider>
                          <Tooltip>
                              <TooltipTrigger asChild>
@@ -307,12 +305,9 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
                                     size="icon"
                                     className="h-7 w-7 text-destructive/80 hover:text-destructive"
                                     onClick={() => {
-                                        // Add confirmation here if desired, or rely on context/manage page for safe delete
-                                        toast({ title: "Deletion from card disabled.", description: "Use manage section if available."});
-                                        // Example: Trigger delete directly (use with caution on card):
-                                        // deleteTask(task.id).catch(err => toast({ variant: "destructive", title: "Delete Failed", description: err.message }));
+                                        toast({ title: "Deletion from card disabled.", description: "Use 'Tasks Created By You' section."});
                                     }}
-                                    disabled={isUploading} // Only disable during upload
+                                    disabled={isUploading}
                                 >
                                    <Trash2 className="h-4 w-4" />
                                 </Button>
@@ -322,6 +317,7 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
                              </TooltipContent>
                          </Tooltip>
                      </TooltipProvider>
+                     */}
                 </div>
             )}
           </CardFooter>
@@ -330,3 +326,5 @@ export function TaskCard({ task, index, isAdmin, isDraggable }: TaskCardProps) {
     </Draggable>
   );
 }
+
+    

@@ -28,7 +28,7 @@ interface AuthContextType {
   updateTask: (taskId: string, updates: Partial<Task>) => Promise<void>; // Function to update a task
   addTask: (newTask: Task) => Promise<void>; // Function to add a task
   addMultipleTasks: (newTasks: Task[]) => Promise<void>; // Function to add multiple tasks
-  deleteTask: (taskId: string) => Promise<void>; // Function to delete a task (admin only)
+  deleteTask: (taskIdToDelete: string, deleteAllInstances?: boolean) => Promise<void>; // Modified to handle deleting all instances
   fetchTasks: () => Promise<void>; // Add explicit fetchTasks function
   isMasterAdmin: boolean; // Added master admin check
 }
@@ -262,10 +262,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
     console.log(`Attempting login for USN: ${usn}`); // Debug log
     await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
 
-    // Use the runtime state `mockUsers` which should contain HASHED passwords
-    const foundUser = mockUsers.find(u => u.usn === usn); // Already uppercase in mockUsers
+    // --- Load latest users from storage *during* login attempt ---
+    const storedUsersString = localStorage.getItem('uniTaskMockUsers');
+    const currentMockUsers = deserializeUsers(storedUsersString || '[]');
+    // ---
 
-    console.log('Found user in runtime mock data:', foundUser); // Debug log
+    const foundUser = currentMockUsers.find(u => u.usn === usn); // Compare against latest list
+
+    console.log('Found user in latest mock data:', foundUser); // Debug log
 
     if (!foundUser) {
         console.error(`Login failed: USN ${usn} not found.`); // Debug log
@@ -316,7 +320,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
 
         // Allow null semester, but validate numbers are between 1 and 8
-        if (semester !== null && (semester < 1 || semester > 8)) {
+         if (semester !== null && (isNaN(semester) || semester < 1 || semester > 8)) {
             setLoading(false);
             throw new Error("Invalid semester. Must be between 1 and 8, or null.");
         }
@@ -722,22 +726,42 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
 
 
-  const deleteTask = async (taskId: string): Promise<void> => {
-     // Allow any admin to delete for now, could add owner check (task.assignedBy === user.usn || isMasterAdmin)
-     if (user?.role !== 'admin') {
-          throw new Error("Permission denied. Only administrators can delete tasks.");
-      }
-      setTasksLoading(true);
-      await new Promise(resolve => setTimeout(resolve, 200)); // Simulate deletion delay
+   const deleteTask = async (taskIdToDelete: string, deleteAllInstances: boolean = false): Promise<void> => {
+       // Allow any admin to delete for now
+       if (user?.role !== 'admin') {
+           throw new Error("Permission denied. Only administrators can delete tasks.");
+       }
+       setTasksLoading(true);
+       await new Promise(resolve => setTimeout(resolve, 200)); // Simulate deletion delay
 
-      const updatedTasks = tasks.filter(task => task.id !== taskId);
-       if (updatedTasks.length === tasks.length) {
-         console.warn(`Task with ID ${taskId} not found for deletion.`);
+       let updatedTasks = [...tasks];
+       const taskToDelete = updatedTasks.find(t => t.id === taskIdToDelete);
+
+       if (!taskToDelete) {
+           console.warn(`Task with ID ${taskIdToDelete} not found for deletion.`);
+           setTasksLoading(false);
+           return; // Task doesn't exist
        }
 
-      saveTasks(updatedTasks); // Handles uppercase & semester validity
-      setTasksLoading(false);
-  }
+        if (deleteAllInstances) {
+            // Identify all instances of the same assignment (same title, description, assignedBy, semester)
+            updatedTasks = updatedTasks.filter(task =>
+                !(task.title === taskToDelete.title &&
+                  task.description === taskToDelete.description &&
+                  task.assignedBy === taskToDelete.assignedBy &&
+                  task.semester === taskToDelete.semester)
+            );
+             console.log(`Deleting all instances of assignment: "${taskToDelete.title}"`);
+        } else {
+            // Delete only the specific task instance by its ID
+            updatedTasks = updatedTasks.filter(task => task.id !== taskIdToDelete);
+             console.log(`Deleting specific task instance: ID ${taskIdToDelete}`);
+        }
+
+
+       saveTasks(updatedTasks); // Handles uppercase & semester validity
+       setTasksLoading(false);
+   };
 
    // Add a helper to check if the current user is the master admin
   const isMasterAdmin = user?.usn === MASTER_ADMIN_USN;
@@ -767,7 +791,5 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
-
-
 
     

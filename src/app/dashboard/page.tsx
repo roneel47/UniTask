@@ -31,8 +31,18 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"; // Import Table components
-// AlertDialog is no longer needed in this file after removing delete from submitted table
-// Tooltip is no longer needed here
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { format } from 'date-fns'; // Import format for dates
 
 
@@ -65,7 +75,8 @@ export default function DashboardPage() {
   const [filteredStudentList, setFilteredStudentList] = useState<User[]>([]); // Students/Admins filtered by selected semester
   const [isFetchingUsers, setIsFetchingUsers] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false); // State for refresh button loading
-  // isDeletingTask state removed as delete button moved from this file context
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null); // Track ID of the task assignment being deleted
+
 
    // Fetch all users for admin dropdowns
    useEffect(() => {
@@ -325,20 +336,32 @@ export default function DashboardPage() {
      return counts;
    }, [filteredTasks]);
 
-   // Filter for "Tasks Created By You" (Regular Admin view only, based on semester/USN filter)
+    // Filter for "Tasks Created By You" (Regular Admin view only)
+    // Groups tasks by the core assignment (title, description, assignedBy, semester)
+    // and takes the first instance found as the representative for the table.
     const tasksCreatedByAdmin = useMemo(() => {
-        if (!user || user.role !== 'admin' || isMasterAdmin || !selectedSemesterFilter) {
-           return []; // Only show for regular admins with a semester selected
+        if (!user || user.role !== 'admin' || isMasterAdmin) {
+            return []; // Only show for regular admins
         }
-         const targetSemesterValue = selectedSemesterFilter === 'N/A' ? null : parseInt(selectedSemesterFilter, 10);
 
-         return tasks.filter(task =>
-             task.assignedBy === user.usn && // Only tasks assigned BY this admin
-             task.semester === targetSemesterValue && // Match the selected semester filter
-              // Match USN filter if not 'all'
-             (selectedUsnFilter === 'all' || task.usn === selectedUsnFilter)
-        ).sort((a, b) => b.dueDate.getTime() - a.dueDate.getTime()); // Sort by due date descending
-    }, [user, tasks, selectedSemesterFilter, selectedUsnFilter, isMasterAdmin]);
+        const createdTasksMap = new Map<string, Task>();
+
+        tasks.forEach(task => {
+            if (task.assignedBy === user.usn) {
+                // Create a unique key for the core assignment details
+                const assignmentKey = `${task.title}-${task.description}-${task.assignedBy}-${task.semester}`;
+                // Store only the first instance encountered for each unique assignment
+                if (!createdTasksMap.has(assignmentKey)) {
+                    createdTasksMap.set(assignmentKey, task);
+                }
+            }
+        });
+
+        // Convert map values to array and sort (e.g., by due date descending)
+        return Array.from(createdTasksMap.values())
+                    .sort((a, b) => b.dueDate.getTime() - a.dueDate.getTime());
+
+    }, [user, tasks, isMasterAdmin]);
 
 
    // Handler for Refresh button
@@ -391,13 +414,40 @@ export default function DashboardPage() {
        }
     };
 
+     // Handler for deleting all instances of a task assignment
+    const handleDeleteAllTaskInstances = async (taskId: string) => {
+        const taskToDelete = tasks.find(t => t.id === taskId);
+        if (!taskToDelete || !user || user.role !== 'admin') return; // Ensure task exists and user is admin
+
+        setDeletingTaskId(taskId); // Set loading state for this specific delete action
+        try {
+            // Call context deleteTask with deleteAllInstances = true
+            await deleteTask(taskId, true);
+            toast({
+                title: "Task Assignment Deleted",
+                description: `All instances of task "${taskToDelete.title}" for semester ${taskToDelete.semester === null ? 'N/A' : taskToDelete.semester} have been removed.`,
+            });
+             // fetchTasks(); // Refresh tasks list (already happens in saveTasks -> useEffect)
+        } catch (error: any) {
+             console.error(`Failed to delete task assignment for ${taskId}:`, error);
+             toast({
+                 variant: "destructive",
+                 title: "Deletion Failed",
+                 description: error.message || `Could not delete task assignment "${taskToDelete.title}".`,
+             });
+        } finally {
+             setDeletingTaskId(null); // Clear loading state
+        }
+    };
+
+
     // Initial fetch for users on component mount
     useEffect(() => {
        fetchUsersForDropdown();
        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user, toast]); // Dependencies: user (to trigger on role change), toast (stable)
 
-    // Edit/Delete/Download handlers removed from here, handled in TaskCard contextually
+    // Edit/Download handlers removed from here, handled in TaskCard contextually
 
   return (
     <div className="container mx-auto p-4 pt-8">
@@ -420,7 +470,7 @@ export default function DashboardPage() {
                <Select
                  value={selectedSemesterFilter ?? ''}
                   onValueChange={(value) => setSelectedSemesterFilter(value === '' ? null : value)}
-                 disabled={isFetchingUsers || tasksLoading || isRefreshing} // Disable during refresh
+                 disabled={isFetchingUsers || tasksLoading || isRefreshing || !!deletingTaskId} // Disable during delete
                >
                  <SelectTrigger id="semester-filter" className="w-full sm:w-[150px]">
                    <SelectValue placeholder={isFetchingUsers ? "Loading..." : "Select Sem"} />
@@ -445,7 +495,7 @@ export default function DashboardPage() {
                    <Select
                      value={selectedUsnFilter ?? ''}
                      onValueChange={(value) => setSelectedUsnFilter(value === '' ? null : (value === 'all' ? 'all' : value.toUpperCase()))}
-                     disabled={isFetchingUsers || tasksLoading || !selectedSemesterFilter || isRefreshing} // Disable during refresh
+                     disabled={isFetchingUsers || tasksLoading || !selectedSemesterFilter || isRefreshing || !!deletingTaskId} // Disable during delete
                    >
                      <SelectTrigger id="user-filter" className="w-full sm:w-[200px]">
                        <SelectValue placeholder={isFetchingUsers ? "Loading..." : "Select user..."} />
@@ -472,13 +522,13 @@ export default function DashboardPage() {
 
              {/* Create Task Button (Only for Regular Admins) */}
              {!isMasterAdmin && (
-                 <Button onClick={() => setIsCreateTaskOpen(true)} className="bg-accent text-accent-foreground hover:bg-accent/90 w-full sm:w-auto ml-auto" disabled={isCreatingTask || isRefreshing}>
+                 <Button onClick={() => setIsCreateTaskOpen(true)} className="bg-accent text-accent-foreground hover:bg-accent/90 w-full sm:w-auto ml-auto" disabled={isCreatingTask || isRefreshing || !!deletingTaskId}>
                    {isCreatingTask ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
                    Create Task
                  </Button>
              )}
               {/* Refresh Tasks Button (for Admins) */}
-              <Button onClick={handleRefreshTasks} variant="outline" className="w-full sm:w-auto" disabled={isRefreshing || tasksLoading}>
+              <Button onClick={handleRefreshTasks} variant="outline" className="w-full sm:w-auto" disabled={isRefreshing || tasksLoading || !!deletingTaskId}>
                  {isRefreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
                  Refresh Tasks
               </Button>
@@ -628,40 +678,90 @@ export default function DashboardPage() {
 
 
             {/* --- Tasks Created By You Table (Regular Admin Only) --- */}
-             {user?.role === 'admin' && !isMasterAdmin && selectedSemesterFilter && tasksCreatedByAdmin.length > 0 && (
+             {user?.role === 'admin' && !isMasterAdmin && tasksCreatedByAdmin.length > 0 && (
                  <div className="mt-12"> {/* Add margin top */}
                      <h2 className="text-xl font-semibold text-primary mb-4 flex items-center">
                         <History className="mr-2 h-5 w-5" /> Tasks Created By You ({tasksCreatedByAdmin.length})
                      </h2>
                      <p className="text-sm text-muted-foreground mb-4">
-                        Showing tasks you assigned matching the filter: Semester {selectedSemesterFilter === 'N/A' ? 'N/A' : selectedSemesterFilter}, User {selectedUsnFilter ?? 'All'}.
+                        Showing unique task assignments created by you. Deleting here removes the task for all assigned users.
                      </p>
                      <div className="border rounded-lg overflow-hidden">
                          <Table>
                              <TableHeader>
                                  <TableRow>
                                      <TableHead>Task Title</TableHead>
-                                     <TableHead>Assigned To (USN)</TableHead>
-                                     <TableHead>Current Status</TableHead>
-                                     <TableHead>Due Date</TableHead>
-                                     {/* Remove Actions column for simplicity here */}
-                                     {/* <TableHead className="text-right">Actions</TableHead> */}
+                                     <TableHead>Assigned Semester</TableHead>
+                                     <TableHead>Date Created (Due Date)</TableHead>
+                                     <TableHead className="text-right">Actions</TableHead>
                                  </TableRow>
                              </TableHeader>
                              <TableBody>
                                  {tasksCreatedByAdmin.map((task) => (
-                                     <TableRow key={task.id}>
+                                     <TableRow key={task.id} className={deletingTaskId === task.id ? 'opacity-50' : ''}>
                                          <TableCell className="font-medium">{task.title}</TableCell>
-                                         <TableCell>{task.usn}</TableCell>
-                                         <TableCell>{task.status}</TableCell>
+                                         <TableCell>{task.semester === null ? 'N/A' : `Semester ${task.semester}`}</TableCell>
                                          <TableCell>
-                                             {format(task.dueDate, 'PP')} {/* Format date */}
+                                            {/* Display Due Date as "Created Date" for simplicity */}
+                                             {format(task.dueDate, 'PP')}
                                          </TableCell>
-                                         {/* Remove Actions Cell */}
-                                          {/* <TableCell className="text-right space-x-1">
-                                             <Button variant="ghost" size="icon" disabled> <Edit className="h-4 w-4" /> </Button>
-                                             <Button variant="ghost" size="icon" disabled> <Trash2 className="h-4 w-4" /> </Button>
-                                         </TableCell> */}
+                                         <TableCell className="text-right space-x-1">
+                                             {/* Edit Button (Future Implementation) */}
+                                              <TooltipProvider>
+                                                 <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                       <Button variant="ghost" size="icon" className="h-8 w-8" disabled={!!deletingTaskId}>
+                                                          <Edit className="h-4 w-4" />
+                                                       </Button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                        <p>Edit Task (Not Implemented)</p>
+                                                    </TooltipContent>
+                                                 </Tooltip>
+                                              </TooltipProvider>
+
+                                             {/* Delete Button with Confirmation */}
+                                              <AlertDialog>
+                                                 <TooltipProvider>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <AlertDialogTrigger asChild>
+                                                                 <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-8 w-8 text-destructive/80 hover:text-destructive"
+                                                                    disabled={!!deletingTaskId}
+                                                                 >
+                                                                    {deletingTaskId === task.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <Trash2 className="h-4 w-4" />}
+                                                                 </Button>
+                                                            </AlertDialogTrigger>
+                                                        </TooltipTrigger>
+                                                         <TooltipContent>
+                                                            <p>Delete Assignment for All Users</p>
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                 </TooltipProvider>
+                                                 <AlertDialogContent>
+                                                     <AlertDialogHeader>
+                                                         <AlertDialogTitle>Delete Task Assignment "{task.title}"?</AlertDialogTitle>
+                                                         <AlertDialogDescription>
+                                                            This action cannot be undone. This will permanently delete the task assignment "<span className="font-semibold">{task.title}</span>" for <span className="font-semibold">all users</span> in semester {task.semester === null ? 'N/A' : task.semester}. Are you sure?
+                                                         </AlertDialogDescription>
+                                                     </AlertDialogHeader>
+                                                     <AlertDialogFooter>
+                                                         <AlertDialogCancel disabled={deletingTaskId === task.id}>Cancel</AlertDialogCancel>
+                                                         <AlertDialogAction
+                                                             onClick={() => handleDeleteAllTaskInstances(task.id)}
+                                                             disabled={deletingTaskId === task.id}
+                                                             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                                         >
+                                                             {deletingTaskId === task.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                                             Yes, Delete for All
+                                                         </AlertDialogAction>
+                                                     </AlertDialogFooter>
+                                                 </AlertDialogContent>
+                                              </AlertDialog>
+                                         </TableCell>
                                      </TableRow>
                                  ))}
                              </TableBody>
@@ -670,12 +770,6 @@ export default function DashboardPage() {
                  </div>
              )}
 
-              {/* Message if filters selected, Kanban tasks might exist, but NO tasks created by this admin match filter */}
-              {user?.role === 'admin' && !isMasterAdmin && selectedSemesterFilter && filteredTasks.length > 0 && tasksCreatedByAdmin.length === 0 && (
-                 <div className="mt-12 p-6 text-center text-muted-foreground border rounded-lg">
-                    You have not created any tasks that match the current filter criteria.
-                 </div>
-              )}
              {/* --- End Tasks Created By You Table --- */}
 
         </>
@@ -694,3 +788,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    
