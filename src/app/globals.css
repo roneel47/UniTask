@@ -8,85 +8,85 @@ body {
 
 @layer base {
   :root {
-    /* Light Theme - Vector/Hip Hop Inspired */
+    /* Light Theme - Based on SVG Icon */
     --background: 0 0% 98%; /* Near White */
-    --foreground: 240 6% 10%; /* Dark Blue/Gray */
+    --foreground: 210 10% 23%; /* Dark Cool Gray */
     --card: 0 0% 100%; /* White */
-    --card-foreground: 240 6% 10%; /* Dark Blue/Gray */
-    --popover: 0 0% 100%; /* White */
-    --popover-foreground: 240 6% 10%; /* Dark Blue/Gray */
-    --primary: 260 100% 55%; /* Vibrant Purple (slightly darker for light bg) */
+    --card-foreground: 210 10% 23%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 210 10% 23%;
+    --primary: 210 90% 55%; /* Vibrant Blue from Icon */
     --primary-foreground: 0 0% 98%; /* Near White for contrast */
-    --secondary: 0 0% 95%; /* Light Gray */
-    --secondary-foreground: 240 6% 10%; /* Dark Blue/Gray */
-    --muted: 0 0% 90%; /* Medium Gray */
-    --muted-foreground: 240 5% 45%; /* Darker Gray */
-    --accent: 170 100% 40%; /* Bright Teal/Cyan (slightly darker for light bg) */
+    --secondary: 210 10% 95%; /* Light Cool Gray */
+    --secondary-foreground: 210 10% 23%;
+    --muted: 210 10% 90%; /* Medium Cool Gray */
+    --muted-foreground: 210 10% 45%; /* Darker Cool Gray */
+    --accent: 158 60% 45%; /* Teal/Green from Icon */
     --accent-foreground: 0 0% 98%; /* Near White */
-    --destructive: 0 80% 55%; /* Bright Red (slightly darker for light bg) */
-    --destructive-foreground: 0 0% 98%; /* Near White */
-    --border: 0 0% 88%; /* Light Gray */
-    --input: 0 0% 88%; /* Light Gray */
-    --ring: 260 100% 55%; /* Vibrant Purple */
+    --destructive: 0 80% 55%; /* Bright Red */
+    --destructive-foreground: 0 0% 98%;
+    --border: 210 10% 88%; /* Light Cool Gray */
+    --input: 210 10% 88%;
+    --ring: 210 90% 60%; /* Slightly lighter Blue for ring */
     --radius: 0.5rem;
 
-    /* Chart Colors (Adjusted for Light Theme) */
-    --chart-1: 260 70% 55%; /* Purple */
-    --chart-2: 170 60% 45%; /* Teal */
-    --chart-3: 300 60% 50%; /* Magenta */
-    --chart-4: 210 70% 50%; /* Blue */
-    --chart-5: 60 80% 45%; /* Yellow/Gold */
+    /* Chart Colors (Adjusted for New Theme) */
+    --chart-1: 210 80% 60%; /* Blue */
+    --chart-2: 158 70% 50%; /* Green */
+    --chart-3: 280 70% 60%; /* Purple (Complementary) */
+    --chart-4: 350 80% 65%; /* Red/Pink (Complementary) */
+    --chart-5: 45 90% 55%;  /* Yellow/Gold from Icon */
 
      /* Sidebar - Light Theme */
-    --sidebar-background: 0 0% 96%; /* Very Light Gray */
-    --sidebar-foreground: 240 6% 10%; /* Dark Blue/Gray */
-    --sidebar-primary: 260 100% 55%; /* Vibrant Purple */
-    --sidebar-primary-foreground: 0 0% 98%; /* Near White */
-    --sidebar-accent: 170 100% 40%; /* Bright Teal/Cyan */
-    --sidebar-accent-foreground: 0 0% 98%; /* Near White */
-    --sidebar-border: 0 0% 88%; /* Light Gray */
-    --sidebar-ring: 260 100% 55%; /* Vibrant Purple */
+    --sidebar-background: 210 15% 96%; /* Very Light Cool Gray */
+    --sidebar-foreground: 210 10% 23%;
+    --sidebar-primary: 210 90% 55%; /* Vibrant Blue */
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 158 60% 45%; /* Teal/Green */
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 210 10% 88%;
+    --sidebar-ring: 210 90% 60%;
   }
 
   .dark {
-    /* Dark Theme - Vector/Hip Hop Theme */
-    --background: 240 6% 10%;
-    --foreground: 0 0% 98%;
-    --card: 240 6% 12%;
+    /* Dark Theme - Based on SVG Icon */
+    --background: 210 10% 10%; /* Dark Blue/Gray */
+    --foreground: 0 0% 98%; /* Near White */
+    --card: 210 10% 12%; /* Slightly darker Blue/Gray */
     --card-foreground: 0 0% 98%;
-    --popover: 240 6% 10%;
+    --popover: 210 10% 10%;
     --popover-foreground: 0 0% 98%;
-    --primary: 260 100% 70%; /* Vibrant Purple */
-    --primary-foreground: 260 100% 15%; /* Dark Purple for contrast */
-    --secondary: 240 5% 20%; /* Dark Gray */
+    --primary: 210 90% 65%; /* Lighter Vibrant Blue */
+    --primary-foreground: 210 90% 10%; /* Dark Blue for contrast */
+    --secondary: 210 10% 20%; /* Darker Cool Gray */
     --secondary-foreground: 0 0% 98%;
-    --muted: 240 5% 15%; /* Very Dark Gray */
-    --muted-foreground: 240 5% 65%; /* Medium Gray */
-    --accent: 170 100% 50%; /* Bright Teal/Cyan */
-    --accent-foreground: 170 100% 10%; /* Dark Teal/Cyan */
-    --destructive: 0 80% 60%; /* Bright Red */
-    --destructive-foreground: 0 0% 98%; /* Near White */
-    --border: 240 5% 25%; /* Gray */
-    --input: 240 5% 25%; /* Gray */
-    --ring: 260 100% 70%; /* Vibrant Purple */
+    --muted: 210 10% 15%; /* Very Dark Cool Gray */
+    --muted-foreground: 210 10% 65%; /* Medium Cool Gray */
+    --accent: 158 70% 55%; /* Lighter Teal/Green */
+    --accent-foreground: 158 70% 10%; /* Dark Green */
+    --destructive: 0 70% 60%; /* Brighter Red */
+    --destructive-foreground: 0 0% 98%;
+    --border: 210 10% 25%; /* Gray */
+    --input: 210 10% 25%;
+    --ring: 210 90% 70%; /* Lighter Blue for ring */
     /* radius kept same */
 
     /* Chart Colors (Dark Theme) */
-    --chart-1: 260 80% 70%;
-    --chart-2: 170 70% 60%;
-    --chart-3: 300 70% 65%;
-    --chart-4: 210 80% 65%;
-    --chart-5: 60 90% 60%;
+    --chart-1: 210 80% 70%; /* Blue */
+    --chart-2: 158 70% 60%; /* Green */
+    --chart-3: 280 70% 70%; /* Purple */
+    --chart-4: 350 80% 70%; /* Red/Pink */
+    --chart-5: 45 90% 60%;  /* Yellow/Gold */
 
     /* Sidebar dark theme - matching main dark */
-    --sidebar-background: 240 6% 12%;
+    --sidebar-background: 210 10% 12%;
     --sidebar-foreground: 0 0% 98%;
-    --sidebar-primary: 260 100% 70%;
-    --sidebar-primary-foreground: 260 100% 15%;
-    --sidebar-accent: 170 100% 50%;
-    --sidebar-accent-foreground: 170 100% 10%;
-    --sidebar-border: 240 5% 25%;
-    --sidebar-ring: 260 100% 70%;
+    --sidebar-primary: 210 90% 65%;
+    --sidebar-primary-foreground: 210 90% 10%;
+    --sidebar-accent: 158 70% 55%;
+    --sidebar-accent-foreground: 158 70% 10%;
+    --sidebar-border: 210 10% 25%;
+    --sidebar-ring: 210 90% 70%;
   }
 }
 
