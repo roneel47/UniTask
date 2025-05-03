@@ -7,7 +7,7 @@ import { KanbanBoard } from '@/components/kanban/kanban-board';
 import { Task, TaskStatus } from '@/types/task';
 import { User } from '@/types/user'; // Import User type
 import { Button } from '@/components/ui/button';
-import { Plus, Loader2, Filter, BookCopy, Columns, ListTodo, Play, Check, CheckCheck, Inbox, RefreshCw } from 'lucide-react'; // Added task status icons & RefreshCw
+import { Plus, Loader2, Filter, BookCopy, Columns, ListTodo, Play, Check, CheckCheck, Inbox, RefreshCw, Edit, Trash2, Download } from 'lucide-react'; // Added icons
 import { CreateTaskDialog } from '@/components/kanban/create-task-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
@@ -23,6 +23,28 @@ import {
 import { Label } from '@/components/ui/label';
 import { LoadingSpinner } from '@/components/layout/loading-spinner'; // Import loading spinner
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'; // Added Card for counts
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table"; // Import Table components
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"; // Import AlertDialog
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'; // Import Tooltip
+import { format } from 'date-fns'; // Import format for dates
+
 
 // Define semester options (1-8 and N/A for admins without semester)
 const semesterOptions = [...Array.from({ length: 8 }, (_, i) => String(i + 1)), 'N/A'];
@@ -38,6 +60,7 @@ export default function DashboardPage() {
     getAllUsers,
     fetchTasks, // Get fetchTasks from context
     isMasterAdmin, // Get master admin status
+    deleteTask, // Get deleteTask from context
   } = useAuth();
 
   const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
@@ -52,6 +75,7 @@ export default function DashboardPage() {
   const [filteredStudentList, setFilteredStudentList] = useState<User[]>([]); // Students/Admins filtered by selected semester
   const [isFetchingUsers, setIsFetchingUsers] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false); // State for refresh button loading
+  const [isDeletingTask, setIsDeletingTask] = useState<string | null>(null); // Track task deletion
 
 
    // Fetch all users for admin dropdowns
@@ -216,7 +240,17 @@ export default function DashboardPage() {
          }));
 
          console.log("Tasks to be added:", tasksToAdd);
-         await addMultipleTasks(tasksToAdd);
+         await addMultipleTasks(tasksToAdd); // Calls context function
+
+         // --- Retroactive Assignment (for tasks assigned to 'all') ---
+         if (assignmentTarget.toLowerCase() === 'all') {
+            // Find users who *newly registered* after this task assignment might have started
+            // This is tricky with mock data, better approach is registration hook
+            // However, we can rely on the registration logic to retroactively assign
+            console.log("Registration logic handles retroactive assignment for new users.");
+         }
+         // --- End of Retroactive Handling ---
+
 
          const semDisplay = semesterTarget === null ? 'N/A' : `semester ${semesterTarget}`;
          toast({
@@ -320,6 +354,21 @@ export default function DashboardPage() {
      return counts;
    }, [filteredTasks]);
 
+   // Filter for Submitted Tasks (Admin view only)
+    const submittedTasks = useMemo(() => {
+       if (!user || user.role !== 'admin' || !selectedSemesterFilter) {
+          return []; // Only show for admins with a semester selected
+       }
+        const targetSemesterValue = selectedSemesterFilter === 'N/A' ? null : parseInt(selectedSemesterFilter, 10);
+
+        return tasks.filter(task =>
+            task.status === TaskStatus.Submitted && // Only submitted tasks
+            task.semester === targetSemesterValue && // Match the selected semester filter
+            (isMasterAdmin || task.assignedBy === user.usn) // Master admin sees all, regular admin sees theirs
+       ).sort((a, b) => (b.submittedAt?.getTime() ?? 0) - (a.submittedAt?.getTime() ?? 0)); // Sort by submission date descending
+    }, [user, tasks, selectedSemesterFilter, isMasterAdmin]);
+
+
    // Handler for Refresh button
    const handleRefreshTasks = async () => {
       if (!user || user.role !== 'admin') return; // Only admins can refresh
@@ -376,12 +425,49 @@ export default function DashboardPage() {
        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user, toast]); // Dependencies: user (to trigger on role change), toast (stable)
 
+   // --- Edit/Delete Handlers for Submitted Tasks Table ---
+   const handleEditTaskClick = (task: Task) => {
+      // TODO: Implement edit functionality - open a dialog pre-filled with task data
+      if (!isAdmin) return; // Should not be reachable
+       console.log("Edit task clicked (implementation needed):", task.id);
+       toast({ title: "Edit Not Implemented", description: "Editing task details is not yet available." });
+   };
+
+   const handleDeleteTaskConfirm = async (taskId: string, taskTitle: string, taskUsn: string) => {
+      if (!isAdmin) return; // Should not be reachable
+      setIsDeletingTask(taskId);
+      console.log(`Deleting task ${taskId}`);
+      try {
+          await deleteTask(taskId); // Call deleteTask from context
+          toast({
+              title: "Task Deleted",
+              description: `Task "${taskTitle}" for student ${taskUsn.toUpperCase()} has been removed.`,
+          });
+           // No need to update local state, context provider handles it and useEffect updates table
+      } catch (error: any) {
+          console.error("Failed to delete task:", error);
+          toast({
+              variant: "destructive",
+              title: "Deletion Failed",
+              description: error.message || "Could not delete the task.",
+          });
+      } finally {
+          setIsDeletingTask(null);
+      }
+   };
+
+     const handleDownloadClick = (url: string | undefined) => {
+        if (!url) return;
+        console.log(`Download requested for ${url}`);
+        window.open(url, '_blank');
+     };
+   // --- End Edit/Delete Handlers ---
+
 
   return (
     <div className="container mx-auto p-4 pt-8">
        <div className="flex flex-col md:flex-row justify-between md:items-center mb-6 gap-4">
         <h1 className="text-2xl font-semibold text-primary">
-          {/* Ensure user.usn and user.semester are displayed (handle null semester) */}
            {user.role === 'admin'
             ? `${isMasterAdmin ? 'Master Admin' : 'Admin'} Dashboard${user.semester !== null ? ` (Teacher - Sem ${user.semester})` : ' (Teacher)'}`
             : `Student Dashboard (${user.usn} - Sem ${user.semester === null ? 'N/A' : user.semester})`
@@ -419,12 +505,10 @@ export default function DashboardPage() {
                 <div className="flex items-center gap-2">
                    <Label htmlFor="user-filter" className="text-sm font-medium shrink-0">
                      <Filter className="inline-block h-4 w-4 mr-1 relative -top-px"/>
-                      {/* Slightly different label for master admin */}
                      {isMasterAdmin ? 'View User:' : 'Assign Filter:'}
                    </Label>
                    <Select
                      value={selectedUsnFilter ?? ''}
-                      // Ensure value passed to onValueChange is uppercase or 'all'
                      onValueChange={(value) => setSelectedUsnFilter(value === '' ? null : (value === 'all' ? 'all' : value.toUpperCase()))}
                      disabled={isFetchingUsers || tasksLoading || !selectedSemesterFilter || isRefreshing} // Disable during refresh
                    >
@@ -436,7 +520,6 @@ export default function DashboardPage() {
                             All Users in {selectedSemesterFilter === 'N/A' ? 'N/A' : `Sem ${selectedSemesterFilter}`}
                         </SelectItem>
                        {filteredStudentList.map(student => (
-                         // Ensure value is uppercase
                          <SelectItem key={student.usn} value={student.usn}>
                            {student.usn} {student.role === 'admin' ? '(Admin/CR)' : ''}
                          </SelectItem>
@@ -530,8 +613,6 @@ export default function DashboardPage() {
                     <div className="text-2xl font-bold">{taskCounts[TaskStatus.Done]}</div>
                     </CardContent>
                 </Card>
-                {/* Add Card for Completed status if needed */}
-                {/* <Card> ... {TaskStatus.Completed} ... </Card> */}
             </div>
         )}
          {/* Skeleton for Task Counts */}
@@ -589,29 +670,19 @@ export default function DashboardPage() {
 
            {/* Show Kanban board if student OR if admin has selected semester AND (usn or 'all') */}
            {(user?.role === 'student' || (user?.role === 'admin' && selectedSemesterFilter && selectedUsnFilter)) && (
-            <KanbanBoard
-                tasks={filteredTasks} // Already filtered based on role/filters
-                // onTaskMove handled internally
-                 isAdmin={user.role === 'admin'} // Pass admin status (true for both regular and master admin)
+             <KanbanBoard
+                 tasks={filteredTasks} // Already filtered based on role/filters
+                 isAdmin={user.role === 'admin'}
              />
            )}
 
-           {/* Message if filters selected but no tasks found */}
-            {user?.role === 'admin' && selectedSemesterFilter && selectedUsnFilter && filteredTasks.length === 0 && (
+           {/* Message if filters selected but no tasks found for Kanban */}
+            {user?.role === 'admin' && selectedSemesterFilter && selectedUsnFilter && filteredTasks.length === 0 && submittedTasks.length === 0 && (
               <div className="flex flex-col items-center justify-center h-[calc(100vh-350px)] text-center"> {/* Adjusted height */}
                    <Columns className="h-12 w-12 text-muted-foreground mb-4" />
                   <p className="text-lg font-medium text-muted-foreground">No tasks found</p>
                   <p className="text-sm text-muted-foreground">
-                      {isMasterAdmin
-                        ? (selectedUsnFilter === 'all'
-                            ? `No tasks found for ${selectedSemesterFilter === 'N/A' ? 'N/A' : `Semester ${selectedSemesterFilter}`}.`
-                            : `No tasks found for user ${selectedUsnFilter} in ${selectedSemesterFilter === 'N/A' ? 'N/A' : `Semester ${selectedSemesterFilter}`}.`
-                          )
-                        : (selectedUsnFilter === 'all'
-                            ? `No tasks assigned by you found for ${selectedSemesterFilter === 'N/A' ? 'N/A' : `Semester ${selectedSemesterFilter}`}.`
-                            : `No tasks assigned by you found for user ${selectedUsnFilter} in ${selectedSemesterFilter === 'N/A' ? 'N/A' : `Semester ${selectedSemesterFilter}`}.`
-                          )
-                      }
+                      No tasks match the current filters.
                    </p>
               </div>
             )}
@@ -624,6 +695,129 @@ export default function DashboardPage() {
                      <p className="text-sm text-muted-foreground">You currently have no tasks.</p>
                  </div>
             )}
+
+
+            {/* --- Submitted Tasks Table (Admin Only) --- */}
+             {user?.role === 'admin' && selectedSemesterFilter && submittedTasks.length > 0 && (
+                 <div className="mt-12"> {/* Add margin top */}
+                     <h2 className="text-xl font-semibold text-primary mb-4">Submitted Tasks ({submittedTasks.length})</h2>
+                     <div className="border rounded-lg overflow-hidden">
+                         <Table>
+                             <TableHeader>
+                                 <TableRow>
+                                     <TableHead>Task Title</TableHead>
+                                     <TableHead>Student USN</TableHead>
+                                     <TableHead>Submitted At</TableHead>
+                                     <TableHead className="text-right">Actions</TableHead>
+                                 </TableRow>
+                             </TableHeader>
+                             <TableBody>
+                                 {submittedTasks.map((task) => (
+                                     <TableRow key={task.id} className={isDeletingTask === task.id ? 'opacity-50' : ''}>
+                                         <TableCell className="font-medium">{task.title}</TableCell>
+                                         <TableCell>{task.usn}</TableCell>
+                                         <TableCell>
+                                             {task.submittedAt ? format(task.submittedAt, 'PPp') : 'N/A'}
+                                         </TableCell>
+                                         <TableCell className="text-right space-x-1">
+                                            {/* Download Submission Button */}
+                                             {task.submissionUrl && (
+                                                  <TooltipProvider>
+                                                      <Tooltip>
+                                                          <TooltipTrigger asChild>
+                                                               <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-8 w-8 text-green-600 hover:text-green-700"
+                                                                    onClick={() => handleDownloadClick(task.submissionUrl)}
+                                                                    disabled={!!isDeletingTask}
+                                                                >
+                                                                    <Download className="h-4 w-4" />
+                                                               </Button>
+                                                           </TooltipTrigger>
+                                                           <TooltipContent side="left">
+                                                               <p>Download Submission</p>
+                                                           </TooltipContent>
+                                                      </Tooltip>
+                                                  </TooltipProvider>
+                                             )}
+                                             {/* Edit Task Button */}
+                                              <TooltipProvider>
+                                                  <Tooltip>
+                                                      <TooltipTrigger asChild>
+                                                         <Button
+                                                             variant="ghost"
+                                                             size="icon"
+                                                             className="h-8 w-8 text-muted-foreground hover:text-primary"
+                                                             onClick={() => handleEditTaskClick(task)}
+                                                             disabled={!!isDeletingTask}
+                                                         >
+                                                             <Edit className="h-4 w-4" />
+                                                         </Button>
+                                                      </TooltipTrigger>
+                                                      <TooltipContent side="left">
+                                                          <p>Edit Task (Not Implemented)</p>
+                                                      </TooltipContent>
+                                                  </Tooltip>
+                                              </TooltipProvider>
+                                              {/* Delete Task Button */}
+                                              <AlertDialog>
+                                                  <TooltipProvider>
+                                                      <Tooltip>
+                                                          <TooltipTrigger asChild>
+                                                              <AlertDialogTrigger asChild>
+                                                                  <Button
+                                                                      variant="ghost"
+                                                                      size="icon"
+                                                                      className="h-8 w-8 text-destructive/80 hover:text-destructive"
+                                                                      disabled={!!isDeletingTask}
+                                                                  >
+                                                                      {isDeletingTask === task.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <Trash2 className="h-4 w-4" />}
+                                                                  </Button>
+                                                              </AlertDialogTrigger>
+                                                          </TooltipTrigger>
+                                                           <TooltipContent side="left">
+                                                               <p>Delete Task</p>
+                                                           </TooltipContent>
+                                                      </Tooltip>
+                                                  </TooltipProvider>
+                                                  <AlertDialogContent>
+                                                      <AlertDialogHeader>
+                                                          <AlertDialogTitle>Delete Task "{task.title}"?</AlertDialogTitle>
+                                                          <AlertDialogDescription>
+                                                              This action cannot be undone. This will permanently delete this specific task instance for student <span className="font-semibold">{task.usn}</span>. Are you sure?
+                                                          </AlertDialogDescription>
+                                                      </AlertDialogHeader>
+                                                      <AlertDialogFooter>
+                                                          <AlertDialogCancel disabled={!!isDeletingTask}>Cancel</AlertDialogCancel>
+                                                          <AlertDialogAction
+                                                              onClick={() => handleDeleteTaskConfirm(task.id, task.title, task.usn)}
+                                                              disabled={!!isDeletingTask}
+                                                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                                          >
+                                                              {isDeletingTask === task.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                                              Yes, Delete Task
+                                                          </AlertDialogAction>
+                                                      </AlertDialogFooter>
+                                                  </AlertDialogContent>
+                                              </AlertDialog>
+                                         </TableCell>
+                                     </TableRow>
+                                 ))}
+                             </TableBody>
+                         </Table>
+                     </div>
+                 </div>
+             )}
+
+              {/* Message if filters selected, Kanban tasks exist, but NO submitted tasks */}
+              {user?.role === 'admin' && selectedSemesterFilter && filteredTasks.length > 0 && submittedTasks.length === 0 && (
+                 <div className="mt-12 p-6 text-center text-muted-foreground border rounded-lg">
+                    No tasks have been submitted for the current filter yet.
+                 </div>
+              )}
+             {/* --- End Submitted Tasks Table --- */}
+
         </>
       )}
 
@@ -640,6 +834,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-
-    

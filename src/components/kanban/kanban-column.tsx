@@ -3,6 +3,7 @@ import { Droppable } from '@hello-pangea/dnd'; // Only Droppable needed here
 import { TaskCard } from './task-card';
 import { Task, TaskStatus } from '@/types/task';
 import { cn } from '@/lib/utils';
+import { ScrollArea } from '@/components/ui/scroll-area'; // Import ScrollArea
 
 interface KanbanColumnProps {
   status: TaskStatus;
@@ -20,34 +21,40 @@ export function KanbanColumn({ status, tasks, isAdmin, isDroppable, isDraggableF
       </h2>
       <Droppable droppableId={status} isDropDisabled={!isDroppable}>
         {(provided, snapshot) => (
-          <div
-            ref={provided.innerRef}
-            {...provided.droppableProps}
+          <ScrollArea
             className={cn(
-              "p-4 space-y-4 overflow-y-auto flex-grow min-h-[150px]",
+              "flex-grow", // Use flex-grow to take available space
               snapshot.isDraggingOver ? 'bg-accent/20' : 'bg-secondary',
-              !isDroppable ? 'opacity-70' : '' // Visual cue if column is not droppable (e.g., 'Done' for students)
+              !isDroppable ? 'opacity-70' : '' // Visual cue if column is not droppable
             )}
-            style={{ minHeight: 'calc(100vh - 250px)' }} // Adjust height as needed
+             // Set a max height and let ScrollArea handle overflow
+            style={{ maxHeight: 'calc(100vh - 280px)' }} // Adjust 280px based on surrounding elements
           >
-            {tasks.map((task, index) => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                index={index}
-                isAdmin={isAdmin}
-                // Pass the isDraggableFrom flag down to the card
-                // The card itself might have further logic, but this controls if it's draggable *at all* from this column
-                isDraggable={isDraggableFrom}
-              />
-            ))}
-            {provided.placeholder}
-             {tasks.length === 0 && !snapshot.isDraggingOver && (
-               <div className="text-center text-muted-foreground text-sm pt-4">
-                 No tasks here.
+             <div
+                ref={provided.innerRef}
+                {...provided.droppableProps}
+                className={cn(
+                  "p-4 space-y-4 min-h-[150px] h-full", // Ensure div takes full height of ScrollArea content area
+                )}
+             >
+                {tasks.map((task, index) => (
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    index={index}
+                    isAdmin={isAdmin}
+                    // Pass the isDraggableFrom flag down to the card
+                    isDraggable={isDraggableFrom}
+                  />
+                ))}
+                {provided.placeholder}
+                 {tasks.length === 0 && !snapshot.isDraggingOver && (
+                   <div className="text-center text-muted-foreground text-sm pt-4">
+                     No tasks here.
+                  </div>
+                 )}
               </div>
-             )}
-          </div>
+           </ScrollArea>
         )}
       </Droppable>
     </div>
